@@ -1,9 +1,15 @@
 from datetime import datetime
+from pathlib import Path
+
+import pytest
 
 from m900_battery_tray.capture import (
+    CapturedFrame,
     format_collection_line,
     format_event_line,
     format_frame_line,
+    parse_frame_line,
+    read_capture,
 )
 from m900_battery_tray.hid_transport import HidCollection
 
@@ -43,3 +49,42 @@ def test_format_collection_line_is_a_comment_with_ids_and_usage() -> None:
         "# 1D57:FA65  MI_02  usage 0x000a:0x00  '2.4G 8K HS Receiver'"
         "  \\\\?\\hid#vid_1d57&pid_fa65&mi_02&col03"
     )
+
+
+def test_parse_frame_line_reads_elapsed_time_and_bytes() -> None:
+    line = "2026-11-22T14:01:34.147  t=    3.82  dt=  2.01  03 30 40 01 4a"
+
+    assert parse_frame_line(line) == CapturedFrame(elapsed_s=3.82, data=bytes.fromhex("033040014a"))
+
+
+def test_parse_frame_line_reads_what_format_frame_line_writes() -> None:
+    data = bytes.fromhex("033040034a")
+    line = format_frame_line(WALL_TIME, 125.23, None, data)
+
+    assert parse_frame_line(line) == CapturedFrame(elapsed_s=125.23, data=data)
+
+
+@pytest.mark.parametrize("line", ["", "   ", "# 2026-11-22T14:07:12.027  t=  9.97  read error"])
+def test_parse_frame_line_skips_comments_and_blank_lines(line: str) -> None:
+    assert parse_frame_line(line) is None
+
+
+def test_parse_frame_line_rejects_a_malformed_line() -> None:
+    with pytest.raises(ValueError, match="not a capture line"):
+        parse_frame_line("03 30 40 01 4a")
+
+
+def test_read_capture_returns_only_the_frames(tmp_path: Path) -> None:
+    capture = tmp_path / "capture.txt"
+    capture.write_text(
+        "# 2026-11-22T14:07:02.164  t=    0.11  opened battery collection <path>\n"
+        "2026-11-22T14:07:02.369  t=    0.31  dt=     -  03 30 40 03 4a\n"
+        "# 2026-11-22T14:07:12.027  t=    9.97  read error: read error\n"
+        "2026-11-22T14:07:18.377  t=   16.32  dt= 10.01  03 30 40 03 4a\n",
+        encoding="utf-8",
+    )
+
+    assert read_capture(capture) == [
+        CapturedFrame(elapsed_s=0.31, data=bytes.fromhex("033040034a")),
+        CapturedFrame(elapsed_s=16.32, data=bytes.fromhex("033040034a")),
+    ]

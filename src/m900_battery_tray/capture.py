@@ -4,9 +4,22 @@ Frame lines double as test fixtures. Every other line starts with "#" so a fixtu
 skip it.
 """
 
+import re
+from dataclasses import dataclass
 from datetime import datetime
+from pathlib import Path
 
 from m900_battery_tray.hid_transport import HidCollection
+
+_FRAME_LINE = re.compile(
+    r"^\S+\s+t=\s*(?P<elapsed>\d+(?:\.\d+)?)\s+dt=\s*\S+\s+(?P<hex>[0-9a-f]{2}(?: [0-9a-f]{2})*)$"
+)
+
+
+@dataclass(frozen=True)
+class CapturedFrame:
+    elapsed_s: float
+    data: bytes
 
 
 def format_frame_line(
@@ -30,3 +43,22 @@ def format_collection_line(collection: HidCollection) -> str:
         f"  {collection.product!r}"
         f"  {collection.path.decode(errors='replace')}"
     )
+
+
+def parse_frame_line(line: str) -> CapturedFrame | None:
+    """Return the frame on a capture line, None for a blank or "#" line.
+
+    Raises ValueError for anything else, so a corrupted fixture fails loudly.
+    """
+    stripped = line.strip()
+    if not stripped or stripped.startswith("#"):
+        return None
+    match = _FRAME_LINE.match(stripped)
+    if match is None:
+        raise ValueError(f"not a capture line: {line!r}")
+    return CapturedFrame(elapsed_s=float(match["elapsed"]), data=bytes.fromhex(match["hex"]))
+
+
+def read_capture(path: Path) -> list[CapturedFrame]:
+    lines = path.read_text(encoding="utf-8").splitlines()
+    return [frame for frame in map(parse_frame_line, lines) if frame is not None]
