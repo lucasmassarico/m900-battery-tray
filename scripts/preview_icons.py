@@ -17,19 +17,18 @@ from m900_battery_tray.state import DeviceState, Snapshot
 SIZES = (16, 20, 24, 32)
 ZOOM = 8
 BACKGROUNDS = {TaskbarTheme.DARK: (0x20, 0x20, 0x20), TaskbarTheme.LIGHT: (0xF3, 0xF3, 0xF3)}
-SAMPLES = (
-    ("on battery 85", DeviceState.CONNECTED, 85),
-    ("on battery 100", DeviceState.CONNECTED, 100),
-    ("low 18", DeviceState.CONNECTED, 18),
-    ("critical 7", DeviceState.CONNECTED, 7),
-    ("charging 64", DeviceState.CHARGING, 64),
-    ("charging 100", DeviceState.CHARGING, 100),
-    ("asleep 42", DeviceState.ASLEEP, 42),
-    ("asleep, no level", DeviceState.ASLEEP, None),
-    ("waiting 42", DeviceState.WAITING, 42),
-    ("waiting, no level", DeviceState.WAITING, None),
-    ("no receiver 63", DeviceState.NO_RECEIVER, 63),
-    ("no receiver, no level", DeviceState.NO_RECEIVER, None),
+SAMPLES = (  # label, state, percent, animation frame
+    ("on battery 85", DeviceState.CONNECTED, 85, 0),
+    ("on battery 100", DeviceState.CONNECTED, 100, 0),
+    ("low 18", DeviceState.CONNECTED, 18, 0),
+    ("critical 7", DeviceState.CONNECTED, 7, 0),
+    *((f"charging, frame {frame}", DeviceState.CHARGING, None, frame) for frame in range(8)),
+    ("asleep 42", DeviceState.ASLEEP, 42, 0),
+    ("asleep, no level", DeviceState.ASLEEP, None, 0),
+    ("waiting 42", DeviceState.WAITING, 42, 0),
+    ("waiting, no level", DeviceState.WAITING, None, 0),
+    ("no receiver 63", DeviceState.NO_RECEIVER, 63, 0),
+    ("no receiver, no level", DeviceState.NO_RECEIVER, None, 0),
 )
 LABEL_WIDTH = 140
 HEADER_HEIGHT = 18
@@ -47,7 +46,7 @@ def main(output: Path) -> None:
     draw = ImageDraw.Draw(sheet)
     for column, (theme, size) in enumerate(columns):
         draw.text((LABEL_WIDTH + column * CELL + PADDING, 3), f"{theme.value} {size}px", "white")
-    for row, (label, state, percent) in enumerate(SAMPLES):
+    for row, (label, state, percent, frame) in enumerate(SAMPLES):
         top = HEADER_HEIGHT + row * CELL
         draw.text((PADDING, top + CELL // 2), label, "white")
         for column, (theme, size) in enumerate(columns):
@@ -59,6 +58,7 @@ def main(output: Path) -> None:
                 theme,
                 low_percent=20,
                 critical_percent=10,
+                frame=frame,
             )
             sheet.paste(icon, (left + PADDING, top + PADDING), icon)
             zoomed = icon.resize((size * ZOOM, size * ZOOM), Image.Resampling.NEAREST)

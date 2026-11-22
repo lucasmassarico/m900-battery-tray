@@ -9,6 +9,7 @@ from m900_battery_tray.icon import TaskbarTheme
 PERSONALIZE_KEY = r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize"
 DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2 = -4
 SM_CXSMICON = 49
+SPI_GETCLIENTAREAANIMATION = 0x1042
 ERROR_ALREADY_EXISTS = 183
 
 _user32 = ctypes.WinDLL("user32", use_last_error=True)
@@ -22,6 +23,17 @@ _user32.GetDpiForSystem.argtypes = []
 _user32.GetDpiForSystem.restype = wintypes.UINT
 _user32.GetSystemMetricsForDpi.argtypes = [ctypes.c_int, wintypes.UINT]
 _user32.GetSystemMetricsForDpi.restype = ctypes.c_int
+_user32.SetTimer.argtypes = [wintypes.HWND, ctypes.c_size_t, wintypes.UINT, ctypes.c_void_p]
+_user32.SetTimer.restype = ctypes.c_size_t
+_user32.KillTimer.argtypes = [wintypes.HWND, ctypes.c_size_t]
+_user32.KillTimer.restype = wintypes.BOOL
+_user32.SystemParametersInfoW.argtypes = [
+    wintypes.UINT,
+    wintypes.UINT,
+    ctypes.c_void_p,
+    wintypes.UINT,
+]
+_user32.SystemParametersInfoW.restype = wintypes.BOOL
 _kernel32.CreateMutexW.argtypes = [ctypes.c_void_p, wintypes.BOOL, wintypes.LPCWSTR]
 _kernel32.CreateMutexW.restype = wintypes.HANDLE
 
@@ -38,6 +50,22 @@ def small_icon_size(hwnd: int | None) -> int:
     """The notification-area icon size, in pixels, for the DPI of the given window."""
     dpi = _user32.GetDpiForWindow(hwnd) if hwnd else 0
     return _user32.GetSystemMetricsForDpi(SM_CXSMICON, dpi or _user32.GetDpiForSystem())
+
+
+def animations_enabled() -> bool:
+    """Windows' 'Animation effects' setting (Settings > Accessibility > Visual effects)."""
+    enabled = wintypes.BOOL(True)
+    _user32.SystemParametersInfoW(SPI_GETCLIENTAREAANIMATION, 0, ctypes.byref(enabled), 0)
+    return bool(enabled.value)
+
+
+def set_timer(hwnd: int, timer_id: int, interval_ms: int) -> None:
+    """Post WM_TIMER to the window every `interval_ms`. Call from the window's thread."""
+    _user32.SetTimer(hwnd, timer_id, interval_ms, None)
+
+
+def kill_timer(hwnd: int, timer_id: int) -> None:
+    _user32.KillTimer(hwnd, timer_id)
 
 
 def read_taskbar_theme() -> TaskbarTheme:

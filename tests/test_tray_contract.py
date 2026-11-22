@@ -16,5 +16,6 @@ def test_pystray_win32_internals_used_by_the_tray() -> None:
     assert isinstance(icon._message_handlers, dict)
     assert icon._icon_handle is None
     assert callable(Icon._assert_icon_handle)
-    for name in ("LoadImage", "PostMessage", "IMAGE_ICON", "LR_LOADFROMFILE"):
+    assert callable(Icon._release_icon)
+    for name in ("LoadImage", "DestroyIcon", "PostMessage", "IMAGE_ICON", "LR_LOADFROMFILE"):
         assert hasattr(win32, name), name

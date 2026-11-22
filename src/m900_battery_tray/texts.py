@@ -24,7 +24,8 @@ def tooltip(snapshot: Snapshot, low_percent: int, critical_percent: int) -> str:
         case DeviceState.CONNECTED:
             lines = [_with_percent(percent), _battery_band(percent, low_percent, critical_percent)]
         case DeviceState.CHARGING:
-            lines = [_with_percent(percent), "Charging"]
+            # The mouse freezes the level while charging, so it isn't shown.
+            lines = [MODEL_NAME, "Charging", "Level shown after unplugging"]
         case DeviceState.ASLEEP:
             lines = [_with_percent(percent), "Asleep"]
         case DeviceState.WAITING:
@@ -42,7 +43,7 @@ def status_line(snapshot: Snapshot) -> str:
         case DeviceState.CONNECTED:
             return f"Battery {percent}% · On battery"
         case DeviceState.CHARGING:
-            return f"Battery {percent}% · Charging"
+            return "Charging"
         case DeviceState.ASLEEP:
             return "Mouse asleep" if percent is None else f"Battery {percent}% · Asleep"
         case DeviceState.WAITING:

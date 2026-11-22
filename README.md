@@ -21,7 +21,7 @@ It works with the mouse's 2.4 GHz receiver (`1D57:FA65`). Bluetooth is not suppo
 | White (or black on a light taskbar) number and gauge | On battery |
 | Amber | Low battery (20 % or less) |
 | Red | Critical battery (10 % or less) |
-| Green, with a lightning bolt | Charging. The level reads a few points high while the cable is in |
+| Green lightning bolt, with a block moving through the gauge | Charging. The mouse doesn't report its real level while the cable is in, so the number comes back after you unplug it. The block stays still if Windows animation effects are off |
 | Faded, dotted gauge | The mouse is asleep. The number is the last known level |
 | Faded, three dots in the gauge | Waiting for the first reading |
 | Faded, with an ✕ | The USB receiver is unplugged |

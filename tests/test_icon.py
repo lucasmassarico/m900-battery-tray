@@ -1,7 +1,7 @@
 import pytest
 from PIL import Image
 
-from m900_battery_tray.icon import PALETTES, TaskbarTheme, render_icon
+from m900_battery_tray.icon import CHARGING_FRAMES, PALETTES, TaskbarTheme, render_icon
 from m900_battery_tray.state import DeviceState, Snapshot
 
 DARK = TaskbarTheme.DARK
@@ -21,6 +21,7 @@ def render(
     theme: TaskbarTheme = DARK,
     low: int = 20,
     critical: int = 10,
+    frame: int = 0,
 ) -> Image.Image:
     return render_icon(
         Snapshot(state=state, percent=percent),
@@ -28,6 +29,7 @@ def render(
         theme,
         low_percent=low,
         critical_percent=critical,
+        frame=frame,
     )
 
 
@@ -64,6 +66,12 @@ def test_sizes_between_layouts_use_the_smaller_layout() -> None:
 @pytest.mark.parametrize("percent", [None, 0, 7, 100])
 def test_every_state_fits_every_size(size: int, state: DeviceState, percent: int | None) -> None:
     assert render(state, percent, size=size).size == (size, size)
+
+
+@pytest.mark.parametrize("size", range(16, 41))
+@pytest.mark.parametrize("frame", range(CHARGING_FRAMES))
+def test_every_charging_frame_fits_every_size(size: int, frame: int) -> None:
+    assert render(DeviceState.CHARGING, None, size=size, frame=frame).size == (size, size)
 
 
 def test_sizes_below_16_are_rejected() -> None:
@@ -142,25 +150,60 @@ def test_the_light_theme_uses_dark_ink() -> None:
     assert image.getpixel((5, 1)) == (*LIGHT_PALETTE.ink, 255)
 
 
-def test_charging_draws_a_bolt_instead_of_the_nub() -> None:
+def test_charging_shows_a_bolt_instead_of_the_number() -> None:
+    image = render(DeviceState.CHARGING, 64)
+
+    assert opaque_mask(image, DIGIT_ROWS) == [
+        ".........##.....",
+        "........##......",
+        ".......##.......",
+        ".......####.....",
+        "........##......",
+        ".......##.......",
+        "......##........",
+    ]
+    assert image.getpixel((9, 1)) == (*DARK_PALETTE.charging, 255)
+
+
+def test_charging_frame_0_centers_a_block_in_the_gauge() -> None:
     image = render(DeviceState.CHARGING, 64)
 
     assert opaque_mask(image, range(10, 15)) == [
-        "###########...##",
-        "#######...#..##.",
-        "#######...#..###",
-        "#######...#...#.",
-        "###########..#..",
+        "###############.",
+        "#....####.....#.",
+        "#....####.....##",
+        "#....####.....#.",
+        "###############.",
     ]
-    assert image.getpixel((14, 10)) == (*DARK_PALETTE.charging, 255)
-    assert image.getpixel((1, 11)) == (*DARK_PALETTE.charging, 255)
-
-
-def test_charging_never_uses_the_alarm_colors() -> None:
-    image = render(DeviceState.CHARGING, 5)
-
-    assert image.getpixel((1, 11)) == (*DARK_PALETTE.charging, 255)
+    assert image.getpixel((5, 11)) == (*DARK_PALETTE.charging, 255)
     assert image.getpixel((0, 10)) == (*DARK_PALETTE.ink, alpha(0.75))
+
+
+def test_the_charging_block_wraps_around_the_gauge() -> None:
+    image = render(DeviceState.CHARGING, 64, frame=5)
+
+    assert opaque_mask(image, GAUGE_INSIDE_ROWS)[0] == "####.........##."
+
+
+def test_charging_ignores_the_frozen_level() -> None:
+    assert render(DeviceState.CHARGING, 5).tobytes() == render(DeviceState.CHARGING, 90).tobytes()
+
+
+@pytest.mark.parametrize("size", [16, 20, 24, 32])
+def test_charging_frames_differ_and_loop(size: int) -> None:
+    frames = [
+        render(DeviceState.CHARGING, None, size=size, frame=k).tobytes()
+        for k in range(CHARGING_FRAMES + 1)
+    ]
+
+    assert len(set(frames[:CHARGING_FRAMES])) == CHARGING_FRAMES
+    assert frames[CHARGING_FRAMES] == frames[0]
+
+
+def test_other_states_ignore_the_frame() -> None:
+    first = render(DeviceState.CONNECTED, 85, frame=0).tobytes()
+
+    assert render(DeviceState.CONNECTED, 85, frame=3).tobytes() == first
 
 
 @pytest.mark.parametrize("theme", [DARK, LIGHT])

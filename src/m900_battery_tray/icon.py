@@ -5,7 +5,8 @@ background, in colors that work on the light or the dark taskbar. Each state dif
 not only by color:
 
 - on battery: solid gauge; low and critical levels turn digits, fill and outline amber or red;
-- charging: green digits and fill, and a bolt in place of the battery nub;
+- charging: a green bolt in place of the number (the level is frozen while charging) and a
+  green block travelling through the gauge, over CHARGING_FRAMES animation frames;
 - asleep: dimmed, with a stippled fill of the last level;
 - waiting for a level: dimmed, with three dots in the gauge;
 - receiver missing: dimmed, with a cross in place of the gauge.
@@ -88,7 +89,12 @@ FONT_3X5: dict[str, Bitmap] = {
     "-": ("...", "...", "###", "...", "..."),
 }
 BOLT: Bitmap = ("..##", ".##.", ".###", "..#.", ".#..")
+BOLT_7: Bitmap = ("...##", "..##.", ".##..", ".####", "..##.", ".##..", "##...")
 CROSS: Bitmap = ("#...#", ".#.#.", "..#..", ".#.#.", "#...#")
+
+# While charging the mouse reports a frozen level, so the icon shows a bolt instead of a number
+# and a block travelling through the gauge (indeterminate progress), one step per frame.
+CHARGING_FRAMES = 8
 
 
 @dataclass(frozen=True)
@@ -100,20 +106,54 @@ class _Layout:
     gauge_y: int
     gauge_height: int
     stroke: int
+    bolt: Bitmap
+    bolt_scale: int
 
 
 _LAYOUTS = {
     16: _Layout(
-        FONT_4X7, digit_scale=1, digit_gap=1, digit_y=1, gauge_y=10, gauge_height=5, stroke=1
+        FONT_4X7,
+        digit_scale=1,
+        digit_gap=1,
+        digit_y=1,
+        gauge_y=10,
+        gauge_height=5,
+        stroke=1,
+        bolt=BOLT_7,
+        bolt_scale=1,
     ),
     20: _Layout(
-        FONT_4X7, digit_scale=1, digit_gap=1, digit_y=2, gauge_y=12, gauge_height=6, stroke=1
+        FONT_4X7,
+        digit_scale=1,
+        digit_gap=1,
+        digit_y=2,
+        gauge_y=12,
+        gauge_height=6,
+        stroke=1,
+        bolt=BOLT_7,
+        bolt_scale=1,
     ),
     24: _Layout(
-        FONT_3X5, digit_scale=2, digit_gap=2, digit_y=2, gauge_y=15, gauge_height=7, stroke=1
+        FONT_3X5,
+        digit_scale=2,
+        digit_gap=2,
+        digit_y=2,
+        gauge_y=15,
+        gauge_height=7,
+        stroke=1,
+        bolt=BOLT,
+        bolt_scale=2,
     ),
     32: _Layout(
-        FONT_4X7, digit_scale=2, digit_gap=2, digit_y=3, gauge_y=19, gauge_height=10, stroke=2
+        FONT_4X7,
+        digit_scale=2,
+        digit_gap=2,
+        digit_y=3,
+        gauge_y=19,
+        gauge_height=10,
+        stroke=2,
+        bolt=BOLT_7,
+        bolt_scale=2,
     ),
 }
 MIN_SIZE = min(_LAYOUTS)
@@ -126,8 +166,13 @@ def render_icon(
     *,
     low_percent: int,
     critical_percent: int,
+    frame: int = 0,
 ) -> Image.Image:
-    """Draw the tray icon for a snapshot. Sizes between layouts use the next smaller one."""
+    """Draw the tray icon for a snapshot. Sizes between layouts use the next smaller one.
+
+    `frame` only matters while charging: it picks one of CHARGING_FRAMES animation steps
+    (wrapping around). Frame 0 works as a still icon on its own.
+    """
     if size < MIN_SIZE:
         raise ValueError(f"icon size must be at least {MIN_SIZE} px, got {size}")
     layout = _LAYOUTS[max(n for n in _LAYOUTS if n <= size)]
@@ -137,8 +182,7 @@ def render_icon(
     text = "--" if percent is None else str(percent)
 
     if state is DeviceState.CHARGING:
-        canvas.text(text, layout, palette.charging, 1.0)
-        _draw_charging_gauge(canvas, layout, percent, palette)
+        _draw_charging(canvas, layout, palette, frame % CHARGING_FRAMES)
     elif state is DeviceState.CONNECTED:
         color = _band_color(percent, palette, low_percent, critical_percent)
         canvas.text(text, layout, color, 1.0)
@@ -175,15 +219,21 @@ def _draw_battery(canvas: "_Canvas", layout: _Layout, color: RGB, alpha: float) 
     canvas.rect(width, nub_top, width + stroke - 1, nub_top + nub_height - 1, color, alpha)
 
 
-def _draw_charging_gauge(
-    canvas: "_Canvas", layout: _Layout, percent: int | None, palette: Palette
-) -> None:
-    stroke, top, height = layout.stroke, layout.gauge_y, layout.gauge_height
-    width = canvas.size - 5 * stroke
-    canvas.outline(0, top, width, height, stroke, palette.ink, OUTLINE_ALPHA)
-    canvas.gauge_fill(layout, width, percent, palette.charging, 1.0, stipple=False)
-    bolt_top = top + (height - 5 * stroke) // 2
-    canvas.bitmap(BOLT, width + stroke, bolt_top, palette.charging, 1.0, stroke)
+def _draw_charging(canvas: "_Canvas", layout: _Layout, palette: Palette, frame: int) -> None:
+    bolt_width = len(layout.bolt[0]) * layout.bolt_scale
+    bolt_left = canvas.size // 2 - bolt_width // 2
+    canvas.bitmap(layout.bolt, bolt_left, layout.digit_y, palette.charging, 1.0, layout.bolt_scale)
+    _draw_battery(canvas, layout, palette.ink, OUTLINE_ALPHA)
+
+    stroke = layout.stroke
+    inside_width = canvas.size - 3 * stroke
+    inside_top = layout.gauge_y + stroke
+    inside_height = layout.gauge_height - 2 * stroke
+    block_width = max(3, round(inside_width / 3))
+    start = (inside_width - block_width) // 2 + round(frame * inside_width / CHARGING_FRAMES)
+    for offset in range(block_width):
+        x = stroke + (start + offset) % inside_width
+        canvas.rect(x, inside_top, x, inside_top + inside_height - 1, palette.charging, 1.0)
 
 
 def _draw_waiting_dots(canvas: "_Canvas", layout: _Layout, color: RGB, alpha: float) -> None:
