@@ -3,8 +3,6 @@
 Shows the battery level of your **Delux M900 Pro** wireless mouse in the Windows tray and warns
 you when it runs low. You don't need the Delux software.
 
-> **Status:** it works when run from source. A ready-to-run `.exe` is coming.
-
 ## What it does
 
 - Shows the battery level as a mouse icon in the tray that fills up and changes color.
@@ -41,9 +39,26 @@ The app only **reads** the battery reports that the receiver already sends every
 never sends anything to the mouse or the receiver, so it can't change your mouse settings. It runs
 fine alongside the Delux software.
 
-## Install (from source)
+## Install
 
-You need Windows 10 or 11 and [Python](https://www.python.org/downloads/) 3.12 or newer.
+You need Windows 10 or 11.
+
+1. Download `m900-battery-tray-<version>-win64.zip` from the
+   [latest release](https://github.com/lucasmassarico/m900-battery-tray/releases/latest).
+2. Extract the `m900-battery-tray` folder to a place where it can stay, for example
+   `%LOCALAPPDATA%\Programs`.
+3. Run `m900-battery-tray.exe` in that folder. The exe isn't signed, so Windows SmartScreen may
+   warn the first time (**More info > Run anyway**).
+
+Only one copy runs at a time. To quit, right-click the icon and choose **Exit**. If something
+goes wrong, the log is in `%APPDATA%\m900-battery-tray\app.log`.
+
+If you move the folder later, start the app once from its new place: **Start with Windows**
+follows it.
+
+## Run from source
+
+You need [Python](https://www.python.org/downloads/) 3.12 or newer.
 
 ```powershell
 git clone https://github.com/lucasmassarico/m900-battery-tray.git
@@ -57,9 +72,6 @@ Start it without a console window:
 ```powershell
 .venv\Scripts\pythonw -m m900_battery_tray
 ```
-
-Only one copy runs at a time. To quit, right-click the icon and choose **Exit**. If something
-goes wrong, the log is in `%APPDATA%\m900-battery-tray\app.log`.
 
 ## Settings
 
