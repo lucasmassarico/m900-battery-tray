@@ -1,59 +1,83 @@
-# m900-battery-tray
+# M900 Battery Tray
 
-A Windows 11 tray app that shows the battery level of the **Delux M900 Pro** wireless mouse
-(2.4 GHz receiver `1D57:FA65`) and warns when it runs low, without the vendor software.
+Shows the battery level of your **Delux M900 Pro** wireless mouse in the Windows tray and warns
+you when it runs low. You don't need the Delux software.
 
-> Status: early development. Only the `--probe` diagnostic command works so far.
+> **Work in progress.** The tray app is not ready yet. For now you can run the diagnostic probe
+> described below.
 
-## How it works
+## What it will do
 
-The receiver pushes a 5-byte HID input report about every 2 seconds on a dedicated collection
-(`MI_02` / `COL03`, usage page `0x000A`). Byte 4 of that report is the battery percentage.
-The app only **reads** that collection: it never sends output or feature reports to the
-receiver, and it never touches the vendor configuration channel (`COL04`).
-See [docs/research.md](docs/research.md) for the protocol notes.
+- Show the battery percentage as the tray icon, colored by level: normal, low or critical.
+- Show the model, percentage and state (connected, charging, asleep, receiver missing) in the
+  tooltip.
+- Send a Windows notification when the battery drops below 20 % and again below 10 %.
+- Start with Windows, if you turn it on from the tray menu.
 
-## Requirements
+It works with the mouse's 2.4 GHz receiver (`1D57:FA65`). Bluetooth is not supported.
 
-- Windows 10 or 11
-- Python 3.12 or newer
+## Is it safe?
 
-## Development setup
+The app only **reads** the battery reports that the receiver already sends every 2 seconds. It
+never sends anything to the mouse or the receiver, so it can't change your mouse settings. It runs
+fine alongside the Delux software.
+
+## Install (from source)
+
+You need Windows 10 or 11 and [Python](https://www.python.org/downloads/) 3.12 or newer.
 
 ```powershell
-py -3.14 -m venv .venv
-.venv\Scripts\python -m pip install -e ".[dev]"
+git clone https://github.com/lucasmassarico/m900-battery-tray.git
+cd m900-battery-tray
+py -m venv .venv
+.venv\Scripts\python -m pip install -e .
 ```
 
-Checks:
+## Settings
+
+The app keeps its settings in `%APPDATA%\m900-battery-tray\config.json`. It creates the file with
+these defaults the first time it runs:
+
+```json
+{
+  "version": 1,
+  "low_battery_percent": 20,
+  "critical_battery_percent": 10,
+  "sleep_after_seconds": 10
+}
+```
+
+| Setting | Meaning | Allowed values |
+|---|---|---|
+| `low_battery_percent` | First warning, and the start of the "low" icon color | 2 to 99, above `critical_battery_percent` |
+| `critical_battery_percent` | Second warning, and the start of the "critical" icon color | 1 to 98 |
+| `sleep_after_seconds` | Seconds without battery reports before the mouse is shown as asleep | 6 to 3600 |
+
+## Probe (diagnostics)
+
+The probe lists the receiver's HID collections and prints every battery report it receives with a
+timestamp. Use it if the app can't find your mouse, or to check what your receiver sends.
 
 ```powershell
+.venv\Scripts\python -m m900_battery_tray --probe --seconds 30
+```
+
+```text
+# 2026-11-22T14:01:30.440  t=    0.11  opened battery collection \\?\HID#VID_1D57&PID_FA65&MI_02&Col03#...
+2026-11-22T14:01:32.137  t=    1.81  dt=     -  03 30 40 01 4a
+2026-11-22T14:01:34.147  t=    3.82  dt=  2.01  03 30 40 01 4a
+```
+
+The last byte is the battery percentage (`4a` = 74 %). Without `--seconds` the probe runs until
+you press Ctrl+C, and `--out file.txt` also saves the output to a file.
+
+## Development
+
+```powershell
+.venv\Scripts\python -m pip install -e ".[dev]"
 .venv\Scripts\ruff check .
 .venv\Scripts\black --check .
 .venv\Scripts\pytest
 ```
 
-## Probe
-
-`--probe` lists the receiver's HID collections and prints every raw battery frame with a
-timestamp. It also logs when the receiver (`FA65`) or the wired-mode device (`FA60`) appears or
-disappears. Use it to collect data for the open questions in the research notes.
-
-```powershell
-.venv\Scripts\python -m m900_battery_tray --probe --seconds 60
-.venv\Scripts\python -m m900_battery_tray --probe --out captures\sleep.txt
-```
-
-Without `--seconds` the probe runs until Ctrl+C. `--out` appends the same output to a file.
-
-Sample output:
-
-```text
-# 2026-11-22T14:02:01.390  t=    0.00  7 collection(s) found
-# 1D57:FA65  MI_02  usage 0x000a:0x00  '2.4G 8K HS Receiver'  \\?\hid#vid_1d57&pid_fa65&mi_02&col03#...
-# 2026-11-22T14:02:01.412  t=    0.02  opened battery collection \\?\hid#vid_1d57&pid_fa65&mi_02&col03#...
-2026-11-22T14:02:03.130  t=    1.74  dt=     -  03 30 40 01 4c
-2026-11-22T14:02:05.130  t=    3.74  dt=  2.00  03 30 40 01 4c
-```
-
-Lines that start with `#` are events; the others are frames (`03 <model> <event> <state> <percent>`).
+The battery protocol is described in [docs/protocol.md](docs/protocol.md).

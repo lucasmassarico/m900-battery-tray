@@ -2,7 +2,7 @@
 
 Read-only: it opens only the battery collection (usage page 0x000A) and never writes to it.
 It also re-enumerates every few seconds and logs when the receiver (FA65) or the wired-mode
-device (FA60) appears or disappears, to answer the open questions in docs/research.md.
+device (FA60) appears or disappears (see "Not verified yet" in docs/protocol.md).
 """
 
 import contextlib

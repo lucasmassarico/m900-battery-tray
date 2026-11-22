@@ -1,7 +1,7 @@
 """Read-only HID access, kept behind a small interface so it can be faked in tests.
 
 The interface deliberately has no write method: battery reading is passive and the app
-must never send output or feature reports to the receiver (see docs/research.md).
+must never send output or feature reports to the receiver (see docs/protocol.md).
 """
 
 from collections.abc import Iterable, Mapping
