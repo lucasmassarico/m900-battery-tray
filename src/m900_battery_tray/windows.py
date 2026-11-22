@@ -1,8 +1,12 @@
-"""Thin Win32 helpers: DPI awareness, tray icon size, taskbar theme, single instance."""
+"""Thin Win32 helpers: DPI awareness, tray icon size, taskbar theme, single instance, and
+opening a file for editing."""
 
 import ctypes
+import os
+import subprocess
 import winreg
 from ctypes import wintypes
+from pathlib import Path
 
 from m900_battery_tray.icon import TaskbarTheme
 
@@ -75,6 +79,17 @@ def read_taskbar_theme() -> TaskbarTheme:
     except OSError:
         value = None
     return TaskbarTheme.from_system_uses_light_theme(value)
+
+
+def open_in_editor(path: Path) -> None:
+    """Open a file with the user's default app for its type, or Notepad if there is none.
+
+    Raises OSError if neither can be started.
+    """
+    try:
+        os.startfile(path)
+    except OSError:
+        subprocess.Popen(["notepad.exe", str(path)])
 
 
 class SingleInstance:

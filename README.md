@@ -11,6 +11,8 @@ you when it runs low. You don't need the Delux software.
 - Shows the model, percentage and state in the tooltip and at the top of the right-click menu.
 - Sends a Windows notification when the battery drops to 20 %, and again at 10 %.
 - Starts with Windows, if you tick **Start with Windows** in the right-click menu.
+- Opens its settings file from the right-click menu (**Edit settings**) and applies changes when
+  you save it, without a restart.
 
 It works with the mouse's 2.4 GHz receiver (`1D57:FA65`). Bluetooth is not supported.
 
@@ -72,6 +74,11 @@ these defaults the first time it runs:
   "sleep_after_seconds": 15
 }
 ```
+
+To change them, right-click the icon and choose **Edit settings**. The file opens in your default
+app for `.json` files, or in Notepad if there is none. The app applies your changes as soon as
+you save the file, and confirms with a notification. If the file has a mistake, the notification
+says what is wrong and the app keeps the previous settings.
 
 | Setting | Meaning | Allowed values |
 |---|---|---|

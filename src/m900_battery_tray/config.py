@@ -1,5 +1,6 @@
 """User settings, stored as JSON in %APPDATA%\\m900-battery-tray\\config.json."""
 
+import contextlib
 import json
 import os
 from dataclasses import asdict, dataclass, fields
@@ -101,6 +102,12 @@ def load_or_create(path: Path) -> Config:
         return config_from_dict(data)
     except ConfigError as error:
         raise ConfigError(f"{path}: {error}") from None
+
+
+def create_if_missing(path: Path) -> None:
+    """Write the default settings file unless one already exists (valid or not)."""
+    with contextlib.suppress(FileExistsError):
+        _write_new(path, Config())
 
 
 def _write_new(path: Path, config: Config) -> None:

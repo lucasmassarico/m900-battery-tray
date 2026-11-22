@@ -9,20 +9,37 @@ from pathlib import Path
 from pystray import Icon, Menu, MenuItem
 
 from m900_battery_tray.autostart import RegistryAutostart, launch_command
-from m900_battery_tray.config import Config, ConfigError, default_config_path, load_or_create
+from m900_battery_tray.config import (
+    Config,
+    ConfigError,
+    create_if_missing,
+    default_config_path,
+    load_or_create,
+)
 from m900_battery_tray.hidapi_transport import HidapiTransport
 from m900_battery_tray.presenter import Presenter
 from m900_battery_tray.reader import Reader
-from m900_battery_tray.texts import MODEL_NAME, Notification
+from m900_battery_tray.settings_watcher import SettingsWatcher
+from m900_battery_tray.texts import (
+    MODEL_NAME,
+    Notification,
+    settings_applied,
+    settings_rejected,
+)
 from m900_battery_tray.tray import TrayDisplay, TrayIcon
-from m900_battery_tray.windows import SingleInstance, enable_dpi_awareness, read_taskbar_theme
+from m900_battery_tray.windows import (
+    SingleInstance,
+    enable_dpi_awareness,
+    open_in_editor,
+    read_taskbar_theme,
+)
 
 log = logging.getLogger(__name__)
 
 APP_NAME = "m900-battery-tray"
 MUTEX_NAME = rf"Local\{APP_NAME}"
 LOG_FILE_NAME = "app.log"
-READER_JOIN_TIMEOUT_S = 3.0
+THREAD_JOIN_TIMEOUT_S = 3.0
 
 
 def main() -> int:
@@ -62,6 +79,14 @@ def _run(config_path: Path) -> int:
             log.exception("cannot change the autostart setting")
             icon.notify("Couldn't change the startup setting.", MODEL_NAME)
 
+    def edit_settings(icon: Icon, item: MenuItem) -> None:
+        try:
+            create_if_missing(config_path)
+            open_in_editor(config_path)
+        except OSError:
+            log.exception("cannot open the settings file")
+            icon.notify(f"Couldn't open {config_path}.", MODEL_NAME)
+
     def exit_app(icon: Icon, item: MenuItem) -> None:
         stop.set()
         icon.stop()
@@ -69,6 +94,7 @@ def _run(config_path: Path) -> int:
     menu = Menu(
         MenuItem(lambda item: display.status, None, enabled=False),
         Menu.SEPARATOR,
+        MenuItem("Edit settings", edit_settings),
         MenuItem(
             "Start with Windows", toggle_autostart, checked=lambda item: autostart.is_enabled()
         ),
@@ -80,16 +106,30 @@ def _run(config_path: Path) -> int:
     reader = Reader(HidapiTransport(), presenter.handle, stop)
     reader_thread = threading.Thread(target=reader.run, name="hid-reader", daemon=True)
 
+    def apply_settings(new_config: Config) -> None:
+        presenter.apply_config(new_config)
+        display.notify(settings_applied())
+
+    def reject_settings(error: ConfigError) -> None:
+        display.notify(settings_rejected(str(error), at_start=False))
+
+    watcher = SettingsWatcher(config_path, apply_settings, reject_settings)
+    watcher_thread = threading.Thread(
+        target=watcher.run, args=(stop,), name="settings-watcher", daemon=True
+    )
+
     def setup(icon: Icon) -> None:
         presenter.start()
         if config_problem is not None:
             display.notify(config_problem)
         reader_thread.start()
+        watcher_thread.start()
 
     log.info("starting")
     icon.run(setup)
     stop.set()
-    reader_thread.join(timeout=READER_JOIN_TIMEOUT_S)
+    reader_thread.join(timeout=THREAD_JOIN_TIMEOUT_S)
+    watcher_thread.join(timeout=THREAD_JOIN_TIMEOUT_S)
     log.info("stopped")
     return 0
 
@@ -99,10 +139,7 @@ def _load_config(path: Path) -> tuple[Config, Notification | None]:
         return load_or_create(path), None
     except ConfigError as error:
         log.error("%s; using the default settings", error)
-        problem = Notification(
-            title="M900 tray settings", message=f"{error}. Using the default settings."
-        )
-        return Config(), problem
+        return Config(), settings_rejected(str(error), at_start=True)
 
 
 def _setup_logging(path: Path) -> None:

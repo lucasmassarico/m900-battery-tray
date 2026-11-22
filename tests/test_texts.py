@@ -6,6 +6,8 @@ from m900_battery_tray.texts import (
     TOOLTIP_MAX_LENGTH,
     Notification,
     alert_notification,
+    settings_applied,
+    settings_rejected,
     status_line,
     tooltip,
 )
@@ -67,4 +69,20 @@ def test_critical_alert_notification() -> None:
     assert alert_notification(Alert(level=AlertLevel.CRITICAL, percent=7)) == Notification(
         title="M900 battery critical",
         message="7% left. Charge it now, before the mouse turns off.",
+    )
+
+
+def test_settings_applied_notification() -> None:
+    assert settings_applied() == Notification(
+        title="M900 tray settings", message="New settings applied."
+    )
+
+
+@pytest.mark.parametrize(
+    ("at_start", "fallback"),
+    [(True, "Using the default settings."), (False, "Keeping the previous settings.")],
+)
+def test_settings_rejected_notification(at_start: bool, fallback: str) -> None:
+    assert settings_rejected("config.json: bad value", at_start=at_start) == Notification(
+        title="M900 tray settings", message=f"config.json: bad value. {fallback}"
     )

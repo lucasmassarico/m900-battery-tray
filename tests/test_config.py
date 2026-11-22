@@ -9,6 +9,7 @@ from m900_battery_tray.config import (
     ConfigError,
     config_from_dict,
     config_to_dict,
+    create_if_missing,
     default_config_path,
     load_or_create,
 )
@@ -184,3 +185,20 @@ def test_load_or_create_reports_a_file_that_is_not_utf8(tmp_path: Path) -> None:
 
     with pytest.raises(ConfigError, match="not valid UTF-8"):
         load_or_create(path)
+
+
+def test_create_if_missing_writes_the_defaults(tmp_path: Path) -> None:
+    path = tmp_path / "m900-battery-tray" / "config.json"
+
+    create_if_missing(path)
+
+    assert json.loads(path.read_text(encoding="utf-8")) == DEFAULTS
+
+
+def test_create_if_missing_keeps_an_existing_file_even_if_broken(tmp_path: Path) -> None:
+    path = tmp_path / "config.json"
+    path.write_text("{", encoding="utf-8")
+
+    create_if_missing(path)
+
+    assert path.read_text(encoding="utf-8") == "{"

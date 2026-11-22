@@ -9,6 +9,7 @@ from m900_battery_tray.state import DeviceState, Snapshot
 MODEL_NAME = "M900 Pro"
 # NOTIFYICONDATAW.szTip holds 128 characters including the terminating null.
 TOOLTIP_MAX_LENGTH = 127
+SETTINGS_TITLE = "M900 tray settings"
 
 
 @dataclass(frozen=True)
@@ -63,6 +64,15 @@ def alert_notification(alert: Alert) -> Notification:
     return Notification(
         title="M900 battery low", message=f"{alert.percent}% left. Plug in the cable soon."
     )
+
+
+def settings_applied() -> Notification:
+    return Notification(title=SETTINGS_TITLE, message="New settings applied.")
+
+
+def settings_rejected(reason: str, *, at_start: bool) -> Notification:
+    fallback = "Using the default settings." if at_start else "Keeping the previous settings."
+    return Notification(title=SETTINGS_TITLE, message=f"{reason}. {fallback}")
 
 
 def _with_percent(percent: int | None) -> str:

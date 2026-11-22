@@ -1,10 +1,12 @@
 """Glue between the state machine, the alert rules and whatever displays them.
 
-Runs on the reader thread: every event goes through the state machine, and the display is
-told only about real changes (a new snapshot, or an alert to show).
+Events come from the reader thread and new settings from the settings watcher; a lock keeps
+them in order. The display is told only about real changes (a new snapshot or tooltip, or an
+alert to show).
 """
 
-from dataclasses import dataclass
+import threading
+from dataclasses import dataclass, replace
 from typing import Protocol
 
 from m900_battery_tray.alerts import ThresholdAlerts
@@ -34,17 +36,39 @@ class Presenter:
         self._display = display
         self._monitor = Monitor(sleep_after_s=config.sleep_after_seconds)
         self._alerts = ThresholdAlerts.from_config(config)
+        self._lock = threading.Lock()
 
     def start(self) -> None:
-        self._show(self._monitor.snapshot)
+        with self._lock:
+            self._show(self._monitor.snapshot)
 
     def handle(self, event: Event) -> None:
-        before = self._monitor.snapshot
-        self._monitor = self._monitor.handle(event)
-        snapshot = self._monitor.snapshot
-        if snapshot == before:
-            return
-        self._show(snapshot)
+        with self._lock:
+            before = self._monitor.snapshot
+            self._monitor = self._monitor.handle(event)
+            snapshot = self._monitor.snapshot
+            if snapshot == before:
+                return
+            self._show(snapshot)
+            self._check_alerts(snapshot)
+
+    def apply_config(self, config: Config) -> None:
+        """Switch to new settings at once. The current level is checked against the new
+        thresholds right away: raising a threshold to or above it alerts now, and lowering
+        one below it rearms that alert."""
+        with self._lock:
+            self._config = config
+            self._monitor = replace(self._monitor, sleep_after_s=config.sleep_after_seconds)
+            self._alerts = replace(
+                self._alerts,
+                low_percent=config.low_battery_percent,
+                critical_percent=config.critical_battery_percent,
+            )
+            snapshot = self._monitor.snapshot
+            self._show(snapshot)
+            self._check_alerts(snapshot)
+
+    def _check_alerts(self, snapshot: Snapshot) -> None:
         self._alerts, alert = self._alerts.update(snapshot)
         if alert is not None:
             self._display.notify(alert_notification(alert))

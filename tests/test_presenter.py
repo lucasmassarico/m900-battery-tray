@@ -127,3 +127,40 @@ def test_losing_the_receiver_is_shown() -> None:
 
     assert display.views[-1].snapshot == Snapshot(state=DeviceState.NO_RECEIVER, percent=85)
     assert display.views[-1].tooltip == "M900 Pro\nUSB receiver not found\nLast known: 85%"
+
+
+def test_new_settings_apply_to_the_current_level() -> None:
+    presenter, display = started()
+    presenter.handle(ReceiverOpened(at=0.0))
+    feed_level(presenter, on_battery(30), at=1.0)
+    assert display.views[-1].tooltip == "M900 Pro: 30%\nOn battery"
+
+    presenter.apply_config(Config(low_battery_percent=40))
+
+    assert display.views[-1].tooltip == "M900 Pro: 30%\nLow battery"
+    assert [notification.title for notification in display.notifications] == ["M900 battery low"]
+
+
+def test_a_new_sleep_time_applies_at_once() -> None:
+    presenter, display = started()
+    presenter.handle(ReceiverOpened(at=0.0))
+    feed_level(presenter, on_battery(60), at=1.0)
+
+    presenter.apply_config(Config(sleep_after_seconds=60))
+    presenter.handle(Tick(at=3.0 + 30.0))
+
+    assert display.views[-1].snapshot.state is DeviceState.CONNECTED
+
+
+def test_lowering_a_threshold_rearms_its_alert() -> None:
+    presenter, display = started()
+    presenter.handle(ReceiverOpened(at=0.0))
+    feed_level(presenter, on_battery(18), at=1.0)
+
+    presenter.apply_config(Config(low_battery_percent=15, critical_battery_percent=5))
+    feed_level(presenter, on_battery(15), at=5.0)
+
+    assert [notification.message for notification in display.notifications] == [
+        "18% left. Plug in the cable soon.",
+        "15% left. Plug in the cable soon.",
+    ]
