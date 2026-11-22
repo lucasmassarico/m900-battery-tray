@@ -1,19 +1,26 @@
-"""Tray icon renderer: the battery number in a pixel font over a small battery gauge.
+"""Tray icon renderer: a mouse that fills from the bottom with the battery level.
 
-Drawn pixel-exact at the tray's small-icon size (16, 20, 24 or 32 px), on a transparent
-background, in colors that work on the light or the dark taskbar. Each state differs by shape,
-not only by color:
+The mouse is a hand-drawn pixel bitmap per layout size (16, 20, 24 and 32 px; sizes in between
+use the next smaller one, centred), traced from the Segoe icon-font mouse (U+E962). No font is
+loaded, so every pixel is exact and the icon looks the same on Windows 10 and 11. The exact
+level is only in the tooltip; the icon shows it as a fill and a color band:
 
-- on battery: solid gauge; low and critical levels turn digits, fill and outline amber or red;
-- charging: a green bolt in place of the number (the level is frozen while charging) and a
-  green block travelling through the gauge, over CHARGING_FRAMES animation frames;
-- asleep: dimmed, with a stippled fill of the last level;
-- waiting for a level: dimmed, with three dots in the gauge;
-- receiver missing: dimmed, with a cross in place of the gauge.
+- on battery: 50 % and up in the taskbar's ink, 26-49 % with a soft amber fill, and 25 % or
+  less the whole mouse turns red;
+- charging: the whole mouse is green and the fill rises in a loop over CHARGING_FRAMES frames
+  (the level is frozen while charging, so it isn't shown);
+- asleep: dimmed, with a stippled fill of the last level, or a "z" without one;
+- waiting for a level: dimmed, with three dots;
+- receiver missing: dimmed, with a slash through the mouse.
+
+The color bands are fixed, apart from the configurable alert thresholds: they are a scale to
+read at a glance, and the alerts are the user's own triggers.
 """
 
+from collections import deque
 from dataclasses import dataclass
 from enum import Enum
+from functools import cache
 
 from PIL import Image
 
@@ -21,6 +28,7 @@ from m900_battery_tray.state import DeviceState, Snapshot
 
 RGB = tuple[int, int, int]
 Bitmap = tuple[str, ...]
+Point = tuple[int, int]
 
 
 class TaskbarTheme(Enum):
@@ -36,220 +44,311 @@ class TaskbarTheme(Enum):
 @dataclass(frozen=True)
 class Palette:
     ink: RGB
-    low: RGB
+    caution: RGB
     critical: RGB
     charging: RGB
     dim_alpha: float
 
 
+# Amber and red are tuned in OKLCH to the Fluent semantic colors, with softer chroma; each has
+# at least 3:1 contrast against its taskbar. The light-theme red is darker than Fluent's so it
+# stays apart from the amber under deuteranopia.
 PALETTES = {
     TaskbarTheme.DARK: Palette(
         ink=(0xFF, 0xFF, 0xFF),
-        low=(0xFC, 0xE1, 0x00),
-        critical=(0xFF, 0x99, 0xA4),
+        caution=(0xEB, 0xBD, 0x57),
+        critical=(0xF6, 0x6D, 0x67),
         charging=(0x6C, 0xCB, 0x5F),
         dim_alpha=0.55,
     ),
     TaskbarTheme.LIGHT: Palette(
         ink=(0x1A, 0x1A, 0x1A),
-        low=(0x9D, 0x5D, 0x00),
-        critical=(0xC4, 0x2B, 0x1C),
+        caution=(0xA6, 0x77, 0x00),
+        critical=(0xA5, 0x1F, 0x1B),
         charging=(0x0F, 0x7B, 0x0F),
         dim_alpha=0.70,
     ),
 }
 
-OUTLINE_ALPHA = 0.75
-BAND_OUTLINE_ALPHA = 0.85
+CAUTION_BELOW = 50
+CRITICAL_AT_MOST = 25
 
-FONT_4X7: dict[str, Bitmap] = {
-    "0": (".##.", "#..#", "#..#", "#..#", "#..#", "#..#", ".##."),
-    "1": ("..#.", ".##.", "..#.", "..#.", "..#.", "..#.", ".###"),
-    "2": (".##.", "#..#", "...#", "..#.", ".#..", "#...", "####"),
-    "3": (".##.", "#..#", "...#", "..#.", "...#", "#..#", ".##."),
-    "4": ("...#", "..##", ".#.#", "#..#", "####", "...#", "...#"),
-    "5": ("####", "#...", "###.", "...#", "...#", "#..#", ".##."),
-    "6": (".##.", "#...", "#...", "###.", "#..#", "#..#", ".##."),
-    "7": ("####", "...#", "..#.", "..#.", ".#..", ".#..", ".#.."),
-    "8": (".##.", "#..#", "#..#", ".##.", "#..#", "#..#", ".##."),
-    "9": (".##.", "#..#", "#..#", ".###", "...#", "...#", ".##."),
-    "-": ("....", "....", "....", "####", "....", "....", "...."),
-}
-FONT_3X5: dict[str, Bitmap] = {
-    "0": ("###", "#.#", "#.#", "#.#", "###"),
-    "1": (".#.", "##.", ".#.", ".#.", "###"),
-    "2": ("###", "..#", "###", "#..", "###"),
-    "3": ("###", "..#", "###", "..#", "###"),
-    "4": ("#.#", "#.#", "###", "..#", "..#"),
-    "5": ("###", "#..", "###", "..#", "###"),
-    "6": ("###", "#..", "###", "#.#", "###"),
-    "7": ("###", "..#", "..#", "..#", "..#"),
-    "8": ("###", "#.#", "###", "#.#", "###"),
-    "9": ("###", "#.#", "###", "..#", "###"),
-    "-": ("...", "...", "###", "...", "..."),
-}
-BOLT: Bitmap = ("..##", ".##.", ".###", "..#.", ".#..")
-BOLT_7: Bitmap = ("...##", "..##.", ".##..", ".####", "..##.", ".##..", "##...")
-CROSS: Bitmap = ("#...#", ".#.#.", "..#..", ".#.#.", "#...#")
-
-# While charging the mouse reports a frozen level, so the icon shows a bolt instead of a number
-# and a block travelling through the gauge (indeterminate progress), one step per frame.
+# While charging the mouse reports a frozen level, so the fill rises in a loop instead
+# (indeterminate progress), one step per frame. Frame 0 is the still icon, about half full.
 CHARGING_FRAMES = 8
 
+OUTLINE = "#"
+WHEEL = "|"
+EMPTY = "."
 
-@dataclass(frozen=True)
-class _Layout:
-    font: dict[str, Bitmap]
-    digit_scale: int
-    digit_gap: int
-    digit_y: int
-    gauge_y: int
-    gauge_height: int
-    stroke: int
-    bolt: Bitmap
-    bolt_scale: int
-
-
-_LAYOUTS = {
-    16: _Layout(
-        FONT_4X7,
-        digit_scale=1,
-        digit_gap=1,
-        digit_y=1,
-        gauge_y=10,
-        gauge_height=5,
-        stroke=1,
-        bolt=BOLT_7,
-        bolt_scale=1,
+MOUSE_BITMAPS: dict[int, Bitmap] = {
+    16: (
+        "..#######..",
+        ".#...|...#.",
+        "#....|....#",
+        "#....|....#",
+        "#....|....#",
+        "#....|....#",
+        "#.........#",
+        "#.........#",
+        "#.........#",
+        "#.........#",
+        "#.........#",
+        "#.........#",
+        "#.........#",
+        ".#.......#.",
+        "..#.....#..",
+        "...#####...",
     ),
-    20: _Layout(
-        FONT_4X7,
-        digit_scale=1,
-        digit_gap=1,
-        digit_y=2,
-        gauge_y=12,
-        gauge_height=6,
-        stroke=1,
-        bolt=BOLT_7,
-        bolt_scale=1,
+    20: (
+        "...#######...",
+        ".##...|...##.",
+        ".#....|....#.",
+        "#.....|.....#",
+        "#.....|.....#",
+        "#.....|.....#",
+        "#.....|.....#",
+        "#...........#",
+        "#...........#",
+        "#...........#",
+        "#...........#",
+        "#...........#",
+        "#...........#",
+        "#...........#",
+        "#...........#",
+        "#...........#",
+        ".#.........#.",
+        ".#.........#.",
+        "..##.....##..",
+        "....#####....",
     ),
-    24: _Layout(
-        FONT_3X5,
-        digit_scale=2,
-        digit_gap=2,
-        digit_y=2,
-        gauge_y=15,
-        gauge_height=7,
-        stroke=1,
-        bolt=BOLT,
-        bolt_scale=2,
+    24: (
+        "...##########...",
+        "..##...||...##..",
+        ".##....||....##.",
+        "##.....||.....##",
+        "##.....||.....##",
+        "##.....||.....##",
+        "##.....||.....##",
+        "##.....||.....##",
+        "##............##",
+        "##............##",
+        "##............##",
+        "##............##",
+        "##............##",
+        "##............##",
+        "##............##",
+        "##............##",
+        "##............##",
+        "##............##",
+        "##............##",
+        ".##..........##.",
+        ".##..........##.",
+        "..##........##..",
+        "...###....###...",
+        ".....######.....",
     ),
-    32: _Layout(
-        FONT_4X7,
-        digit_scale=2,
-        digit_gap=2,
-        digit_y=3,
-        gauge_y=19,
-        gauge_height=10,
-        stroke=2,
-        bolt=BOLT_7,
-        bolt_scale=2,
+    32: (
+        "....##############....",
+        "...################...",
+        "..###.....||.....###..",
+        ".##.......||.......##.",
+        "###.......||.......###",
+        "##........||........##",
+        "##........||........##",
+        "##........||........##",
+        "##........||........##",
+        "##........||........##",
+        "##........||........##",
+        "##........||........##",
+        "##..................##",
+        "##..................##",
+        "##..................##",
+        "##..................##",
+        "##..................##",
+        "##..................##",
+        "##..................##",
+        "##..................##",
+        "##..................##",
+        "##..................##",
+        "##..................##",
+        "##..................##",
+        ".##................##.",
+        ".##................##.",
+        ".###..............###.",
+        "..###............###..",
+        "...###..........###...",
+        "....####......####....",
+        ".....############.....",
+        "........######........",
     ),
 }
-MIN_SIZE = min(_LAYOUTS)
+STROKES = {16: 1, 20: 1, 24: 2, 32: 2}
+MIN_SIZE = min(MOUSE_BITMAPS)
+
+Z_MARK: Bitmap = ("###", "..#", ".#.", "#..", "###")
+DOT: Bitmap = ("#",)
 
 
 def render_icon(
-    snapshot: Snapshot,
-    size: int,
-    theme: TaskbarTheme,
-    *,
-    low_percent: int,
-    critical_percent: int,
-    frame: int = 0,
+    snapshot: Snapshot, size: int, theme: TaskbarTheme, *, frame: int = 0
 ) -> Image.Image:
-    """Draw the tray icon for a snapshot. Sizes between layouts use the next smaller one.
+    """Draw the tray icon for a snapshot.
 
     `frame` only matters while charging: it picks one of CHARGING_FRAMES animation steps
     (wrapping around). Frame 0 works as a still icon on its own.
     """
     if size < MIN_SIZE:
         raise ValueError(f"icon size must be at least {MIN_SIZE} px, got {size}")
-    layout = _LAYOUTS[max(n for n in _LAYOUTS if n <= size)]
+    mouse = _mouse(size)
     palette = PALETTES[theme]
     canvas = _Canvas(size)
+    ink, dim = palette.ink, palette.dim_alpha
     state, percent = snapshot.state, snapshot.percent
-    text = "--" if percent is None else str(percent)
 
-    if state is DeviceState.CHARGING:
-        _draw_charging(canvas, layout, palette, frame % CHARGING_FRAMES)
-    elif state is DeviceState.CONNECTED:
-        color = _band_color(percent, palette, low_percent, critical_percent)
-        canvas.text(text, layout, color, 1.0)
-        outline_alpha = OUTLINE_ALPHA if color == palette.ink else BAND_OUTLINE_ALPHA
-        _draw_battery(canvas, layout, color, outline_alpha)
-        canvas.gauge_fill(layout, size - layout.stroke, percent, color, 1.0, stipple=False)
-    else:
-        dim = palette.dim_alpha
-        canvas.text(text, layout, palette.ink, dim)
-        if state is DeviceState.NO_RECEIVER:
-            _draw_cross(canvas, layout, palette.ink, dim)
-        else:
-            _draw_battery(canvas, layout, palette.ink, OUTLINE_ALPHA * dim)
-            if state is DeviceState.ASLEEP:
-                width = size - layout.stroke
-                canvas.gauge_fill(layout, width, percent, palette.ink, dim, stipple=True)
-            else:
-                _draw_waiting_dots(canvas, layout, palette.ink, dim)
+    match state:
+        case DeviceState.CONNECTED if percent is not None:
+            fill_color = _band_color(percent, palette)
+            outline_color = palette.critical if percent <= CRITICAL_AT_MOST else ink
+            _fill(canvas, mouse, percent / 100, fill_color, 1.0)
+            canvas.put_all(mouse.outline, outline_color, 1.0)
+        case DeviceState.CHARGING:
+            step = (frame + CHARGING_FRAMES // 2) % CHARGING_FRAMES
+            _fill(canvas, mouse, step / (CHARGING_FRAMES - 1), palette.charging, 1.0)
+            canvas.put_all(mouse.outline, palette.charging, 1.0)
+        case DeviceState.ASLEEP if percent is not None:
+            canvas.put_all(mouse.outline, ink, dim)
+            _fill(canvas, mouse, percent / 100, ink, dim, stipple=True)
+        case DeviceState.ASLEEP:
+            canvas.put_all(mouse.outline, ink, dim)
+            _draw_mark(canvas, mouse, Z_MARK, 0, ink, dim)
+        case DeviceState.NO_RECEIVER:
+            canvas.put_all(mouse.outline, ink, dim)
+            _draw_slash(canvas, mouse, ink, dim)
+        case _:
+            canvas.put_all(mouse.outline, ink, dim)
+            for index in (-1, 0, 1):
+                _draw_mark(canvas, mouse, DOT, 2 * mouse.stroke * index, ink, dim)
     return canvas.image
 
 
-def _band_color(percent: int | None, palette: Palette, low: int, critical: int) -> RGB:
-    if percent is None or percent > low:
+def _band_color(percent: int, palette: Palette) -> RGB:
+    if percent >= CAUTION_BELOW:
         return palette.ink
-    return palette.critical if percent <= critical else palette.low
+    return palette.critical if percent <= CRITICAL_AT_MOST else palette.caution
 
 
-def _draw_battery(canvas: "_Canvas", layout: _Layout, color: RGB, alpha: float) -> None:
-    stroke, top, height = layout.stroke, layout.gauge_y, layout.gauge_height
-    width = canvas.size - stroke
-    canvas.outline(0, top, width, height, stroke, color, alpha)
-    nub_height = height - 4 * stroke if height > 4 * stroke else stroke
-    nub_top = top + (height - nub_height) // 2
-    canvas.rect(width, nub_top, width + stroke - 1, nub_top + nub_height - 1, color, alpha)
+@dataclass(frozen=True)
+class _Mouse:
+    """The mouse bitmap placed on a canvas: outline pixels, the area the level fills (the
+    interior minus a gap on each side of the wheel, so the wheel stays visible) and where the
+    small marks go."""
+
+    outline: frozenset[Point]
+    fill_area: frozenset[Point]
+    fill_top: int
+    fill_bottom: int
+    marks_top: int
+    center_x: int
+    stroke: int
 
 
-def _draw_charging(canvas: "_Canvas", layout: _Layout, palette: Palette, frame: int) -> None:
-    bolt_width = len(layout.bolt[0]) * layout.bolt_scale
-    bolt_left = canvas.size // 2 - bolt_width // 2
-    canvas.bitmap(layout.bolt, bolt_left, layout.digit_y, palette.charging, 1.0, layout.bolt_scale)
-    _draw_battery(canvas, layout, palette.ink, OUTLINE_ALPHA)
+@cache
+def _mouse(size: int) -> _Mouse:
+    layout = max(n for n in MOUSE_BITMAPS if n <= size)
+    rows = MOUSE_BITMAPS[layout]
+    width, height = len(rows[0]), len(rows)
+    left, top = (size - width) // 2, (size - height) // 2
+    cells = {(x, y): cell for y, row in enumerate(rows) for x, cell in enumerate(row)}
+    outside = _reachable_from_the_border(cells, width, height)
+    interior = {p for p, cell in cells.items() if cell == EMPTY and p not in outside}
+    wheel = {p for p, cell in cells.items() if cell == WHEEL}
+    beside_wheel = {(x + dx, y) for x, y in wheel for dx in (-1, 1)}
+    interior_rows = [y for _, y in interior]
 
-    stroke = layout.stroke
-    inside_width = canvas.size - 3 * stroke
-    inside_top = layout.gauge_y + stroke
-    inside_height = layout.gauge_height - 2 * stroke
-    block_width = max(3, round(inside_width / 3))
-    start = (inside_width - block_width) // 2 + round(frame * inside_width / CHARGING_FRAMES)
-    for offset in range(block_width):
-        x = stroke + (start + offset) % inside_width
-        canvas.rect(x, inside_top, x, inside_top + inside_height - 1, palette.charging, 1.0)
+    def placed(points: set[Point]) -> frozenset[Point]:
+        return frozenset((left + x, top + y) for x, y in points)
+
+    return _Mouse(
+        outline=placed({p for p, cell in cells.items() if cell != EMPTY}),
+        fill_area=placed(interior - beside_wheel),
+        fill_top=top + min(interior_rows),
+        fill_bottom=top + max(interior_rows),
+        marks_top=top + max(y for _, y in wheel) + 1,
+        center_x=left + width // 2,
+        stroke=STROKES[layout],
+    )
 
 
-def _draw_waiting_dots(canvas: "_Canvas", layout: _Layout, color: RGB, alpha: float) -> None:
-    stroke = layout.stroke
-    middle = layout.gauge_y + layout.gauge_height // 2
-    top = middle - stroke // 2 if stroke > 1 else middle
-    for index in range(3):
-        left = 3 * stroke + 4 * stroke * index
-        canvas.rect(left, top, left + stroke - 1, top + stroke - 1, color, alpha)
+def _reachable_from_the_border(cells: dict[Point, str], width: int, height: int) -> set[Point]:
+    border = [
+        (x, y)
+        for (x, y), cell in cells.items()
+        if cell == EMPTY and (x in (0, width - 1) or y in (0, height - 1))
+    ]
+    reached = set(border)
+    queue = deque(border)
+    while queue:
+        x, y = queue.popleft()
+        for neighbour in ((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)):
+            if cells.get(neighbour) == EMPTY and neighbour not in reached:
+                reached.add(neighbour)
+                queue.append(neighbour)
+    return reached
 
 
-def _draw_cross(canvas: "_Canvas", layout: _Layout, color: RGB, alpha: float) -> None:
-    scale = layout.stroke
-    side = 5 * scale
-    top = layout.gauge_y + (layout.gauge_height - side) // 2
-    canvas.bitmap(CROSS, (canvas.size - side) // 2, top, color, alpha, scale)
+def _fill(
+    canvas: "_Canvas",
+    mouse: _Mouse,
+    fraction: float,
+    color: RGB,
+    alpha: float,
+    *,
+    stipple: bool = False,
+) -> None:
+    rows = mouse.fill_bottom - mouse.fill_top + 1
+    filled = max(round(rows * fraction), 1 if fraction > 0 else 0)
+    first_row = mouse.fill_bottom - filled + 1
+    canvas.put_all(
+        {(x, y) for x, y in mouse.fill_area if y >= first_row and not (stipple and (x + y) % 2)},
+        color,
+        alpha,
+    )
+
+
+def _draw_mark(
+    canvas: "_Canvas", mouse: _Mouse, mark: Bitmap, offset_x: int, color: RGB, alpha: float
+) -> None:
+    """Draw a small mark centred in the interior below the wheel, shifted by `offset_x`."""
+    scale = mouse.stroke
+    width, height = len(mark[0]) * scale, len(mark) * scale
+    left = mouse.center_x - width // 2 + offset_x
+    top = mouse.marks_top + (mouse.fill_bottom - mouse.marks_top + 1 - height) // 2
+    canvas.put_all(
+        {
+            (left + column * scale + dx, top + row * scale + dy)
+            for row, line in enumerate(mark)
+            for column, cell in enumerate(line)
+            if cell == OUTLINE
+            for dy in range(scale)
+            for dx in range(scale)
+        },
+        color,
+        alpha,
+    )
+
+
+def _draw_slash(canvas: "_Canvas", mouse: _Mouse, color: RGB, alpha: float) -> None:
+    """A diagonal from the bottom-left to the top-right, with a clear gap cut on each side."""
+    size, stroke = canvas.size, mouse.stroke
+    diagonal = size - 1
+    for y in range(size):
+        for x in range(size):
+            distance = abs(x + y - diagonal)
+            if distance <= stroke:
+                canvas.erase((x, y))
+            if distance < stroke and 0 < x < size - 1 and 0 < y < size - 1:
+                canvas.put_all({(x, y)}, color, alpha)
 
 
 class _Canvas:
@@ -258,59 +357,10 @@ class _Canvas:
         self.image = Image.new("RGBA", (size, size), (0, 0, 0, 0))
         self._pixels = self.image.load()
 
-    def put(self, x: int, y: int, color: RGB, alpha: float) -> None:
-        self._pixels[x, y] = (*color, int(round(255 * alpha)))
+    def put_all(self, points: set[Point] | frozenset[Point], color: RGB, alpha: float) -> None:
+        value = (*color, int(round(255 * alpha)))
+        for point in points:
+            self._pixels[point] = value
 
-    def rect(self, x0: int, y0: int, x1: int, y1: int, color: RGB, alpha: float) -> None:
-        for y in range(y0, y1 + 1):
-            for x in range(x0, x1 + 1):
-                self.put(x, y, color, alpha)
-
-    def outline(
-        self, x: int, y: int, width: int, height: int, stroke: int, color: RGB, alpha: float
-    ) -> None:
-        right, bottom = x + width - 1, y + height - 1
-        self.rect(x, y, right, y + stroke - 1, color, alpha)
-        self.rect(x, bottom - stroke + 1, right, bottom, color, alpha)
-        self.rect(x, y, x + stroke - 1, bottom, color, alpha)
-        self.rect(right - stroke + 1, y, right, bottom, color, alpha)
-
-    def bitmap(
-        self, rows: Bitmap, x: int, y: int, color: RGB, alpha: float, scale: int = 1
-    ) -> None:
-        for row_index, row in enumerate(rows):
-            for column, cell in enumerate(row):
-                if cell == "#":
-                    left, top = x + column * scale, y + row_index * scale
-                    self.rect(left, top, left + scale - 1, top + scale - 1, color, alpha)
-
-    def text(self, text: str, layout: _Layout, color: RGB, alpha: float) -> None:
-        glyphs = [layout.font[char] for char in text]
-        scale, gap = layout.digit_scale, layout.digit_gap
-        width = sum(len(glyph[0]) for glyph in glyphs) * scale + (len(glyphs) - 1) * gap
-        x = self.size // 2 - width // 2
-        for glyph in glyphs:
-            self.bitmap(glyph, x, layout.digit_y, color, alpha, scale)
-            x += len(glyph[0]) * scale + gap
-
-    def gauge_fill(
-        self,
-        layout: _Layout,
-        width: int,
-        percent: int | None,
-        color: RGB,
-        alpha: float,
-        *,
-        stipple: bool,
-    ) -> None:
-        if percent is None:
-            return
-        stroke = layout.stroke
-        inside_width = width - 2 * stroke
-        inside_height = layout.gauge_height - 2 * stroke
-        filled = min(inside_width, max(round(inside_width * percent / 100), 1 if percent else 0))
-        for row in range(inside_height):
-            for column in range(filled):
-                if stipple and (column + row) % 2:
-                    continue
-                self.put(stroke + column, layout.gauge_y + stroke + row, color, alpha)
+    def erase(self, point: Point) -> None:
+        self._pixels[point] = (0, 0, 0, 0)

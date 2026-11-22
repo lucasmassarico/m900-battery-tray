@@ -7,7 +7,7 @@ you when it runs low. You don't need the Delux software.
 
 ## What it does
 
-- Shows the battery percentage as the tray icon, with a small battery gauge under it.
+- Shows the battery level as a mouse icon in the tray that fills up and changes color.
 - Shows the model, percentage and state in the tooltip and at the top of the right-click menu.
 - Sends a Windows notification when the battery drops to 20 %, and again at 10 %.
 - Starts with Windows, if you tick **Start with Windows** in the right-click menu.
@@ -18,13 +18,16 @@ It works with the mouse's 2.4 GHz receiver (`1D57:FA65`). Bluetooth is not suppo
 
 | Icon | Meaning |
 |---|---|
-| White (or black on a light taskbar) number and gauge | On battery |
-| Amber | Low battery (20 % or less) |
-| Red | Critical battery (10 % or less) |
-| Green lightning bolt, with a block moving through the gauge | Charging. The mouse doesn't report its real level while the cable is in, so the number comes back after you unplug it. The block stays still if Windows animation effects are off |
-| Faded, dotted gauge | The mouse is asleep. The number is the last known level |
-| Faded, three dots in the gauge | Waiting for the first reading |
-| Faded, with an ✕ | The USB receiver is unplugged |
+| White (or black on a light taskbar) mouse | On battery, 50 % or more. The fill shows the level |
+| Amber fill | 26 to 49 % |
+| Red mouse | 25 % or less |
+| Green mouse, filling up over and over | Charging. The mouse doesn't report its real level while the cable is in, so the level comes back after you unplug it. The fill stays still if Windows animation effects are off |
+| Faded, dotted fill | The mouse is asleep. The fill is the last known level |
+| Faded, with a "z" | The mouse is asleep and no level has been read yet |
+| Faded, three dots | Waiting for the first reading |
+| Faded, crossed out | The USB receiver is unplugged |
+
+Hover over the icon for the exact percentage.
 
 The icon follows the light or dark taskbar theme. Windows 11 hides new tray icons at first: to
 keep it visible, open **Settings > Personalization > Taskbar > Other system tray icons** and turn
@@ -72,8 +75,8 @@ these defaults the first time it runs:
 
 | Setting | Meaning | Allowed values |
 |---|---|---|
-| `low_battery_percent` | First warning, and the start of the "low" icon color | 2 to 99, above `critical_battery_percent` |
-| `critical_battery_percent` | Second warning, and the start of the "critical" icon color | 1 to 98 |
+| `low_battery_percent` | First warning | 2 to 99, above `critical_battery_percent` |
+| `critical_battery_percent` | Second warning | 1 to 98 |
 | `sleep_after_seconds` | Seconds without battery reports before the mouse is shown as asleep | 12 to 3600 |
 
 `sleep_after_seconds` is not the mouse's own sleep time (the one you set in the Delux app). The

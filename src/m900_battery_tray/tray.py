@@ -4,7 +4,7 @@ pystray needs three changes here, all through its Win32 internals (pinned to pys
 and checked by tests/test_tray_contract.py):
 
 - crisp icon: pystray saves the image as a multi-size .ico and loads it at the large-icon
-  size, so Windows scales it down and the pixel font blurs. Here the icon is drawn and loaded
+  size, so Windows scales it down and the pixel art blurs. Here the icon is drawn and loaded
   at exactly the small-icon size;
 - cheap animation: each distinct image becomes an icon handle once and is cached, so the
   charging animation only swaps cached handles;
@@ -183,7 +183,5 @@ class TrayDisplay:
             view.snapshot,
             small_icon_size(self._icon.hwnd),
             self._read_theme(),
-            low_percent=view.low_percent,
-            critical_percent=view.critical_percent,
             frame=self._frame,
         )

@@ -48,8 +48,6 @@ def test_start_shows_the_receiver_as_missing() -> None:
             snapshot=Snapshot(state=DeviceState.NO_RECEIVER, percent=None),
             tooltip="M900 Pro\nUSB receiver not found",
             status="USB receiver not found",
-            low_percent=20,
-            critical_percent=10,
         )
     ]
 
@@ -117,8 +115,6 @@ def test_uses_the_configured_thresholds_and_sleep_time() -> None:
     presenter.handle(Tick(at=3.0 + 30.0))
 
     assert display.views[-1].snapshot == Snapshot(state=DeviceState.ASLEEP, percent=40)
-    assert display.views[-1].low_percent == 40
-    assert display.views[-1].critical_percent == 15
     assert [notification.title for notification in display.notifications] == ["M900 battery low"]
 
 

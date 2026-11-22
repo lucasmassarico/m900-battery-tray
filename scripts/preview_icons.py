@@ -16,12 +16,10 @@ from m900_battery_tray.state import DeviceState, Snapshot
 
 SIZES = (16, 20, 24, 32)
 ZOOM = 8
+LEVELS = (100, 75, 50, 49, 30, 26, 25, 10, 3, 0)
 BACKGROUNDS = {TaskbarTheme.DARK: (0x20, 0x20, 0x20), TaskbarTheme.LIGHT: (0xF3, 0xF3, 0xF3)}
 SAMPLES = (  # label, state, percent, animation frame
-    ("on battery 85", DeviceState.CONNECTED, 85, 0),
-    ("on battery 100", DeviceState.CONNECTED, 100, 0),
-    ("low 18", DeviceState.CONNECTED, 18, 0),
-    ("critical 7", DeviceState.CONNECTED, 7, 0),
+    *((f"on battery {level}", DeviceState.CONNECTED, level, 0) for level in LEVELS),
     *((f"charging, frame {frame}", DeviceState.CHARGING, None, frame) for frame in range(8)),
     ("asleep 42", DeviceState.ASLEEP, 42, 0),
     ("asleep, no level", DeviceState.ASLEEP, None, 0),
@@ -56,8 +54,6 @@ def main(output: Path) -> None:
                 Snapshot(state=state, percent=percent),
                 size,
                 theme,
-                low_percent=20,
-                critical_percent=10,
                 frame=frame,
             )
             sheet.paste(icon, (left + PADDING, top + PADDING), icon)

@@ -20,8 +20,6 @@ class TrayView:
     snapshot: Snapshot
     tooltip: str
     status: str
-    low_percent: int
-    critical_percent: int
 
 
 class Display(Protocol):
@@ -58,7 +56,5 @@ class Presenter:
                 snapshot=snapshot,
                 tooltip=tooltip(snapshot, low, critical),
                 status=status_line(snapshot),
-                low_percent=low,
-                critical_percent=critical,
             )
         )
