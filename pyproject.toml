@@ -1,0 +1,61 @@
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "m900-battery-tray"
+version = "0.1.0"
+description = "Windows tray app that shows the battery level of the Delux M900 Pro wireless mouse"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "hidapi>=0.14",
+    "pystray>=0.19.5",
+    "Pillow>=11",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8",
+    "pytest-cov>=6",
+    "ruff>=0.8",
+    "black>=24",
+]
+build = [
+    "pyinstaller>=6.11",
+]
+
+[project.scripts]
+m900-battery-tray = "m900_battery_tray.__main__:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/m900_battery_tray"]
+
+[tool.black]
+line-length = 100
+target-version = ["py312"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "--cov=m900_battery_tray --cov-report=term-missing"
+
+[tool.coverage.run]
+branch = true
+omit = [
+    # OS and hardware glue, validated by hand with the real mouse.
+    "*/m900_battery_tray/__main__.py",
+    "*/m900_battery_tray/hidapi_transport.py",
+    "*/m900_battery_tray/probe.py",
+]
+
+[tool.coverage.report]
+fail_under = 80
+show_missing = true
