@@ -41,6 +41,11 @@ def alpha(level: float) -> int:
     return int(round(255 * level))
 
 
+@pytest.mark.parametrize(("value", "theme"), [(1, LIGHT), (0, DARK), (None, DARK), ("1", DARK)])
+def test_taskbar_theme_from_the_registry_value(value: object, theme: TaskbarTheme) -> None:
+    assert TaskbarTheme.from_system_uses_light_theme(value) is theme
+
+
 @pytest.mark.parametrize("size", [16, 20, 24, 32])
 def test_renders_a_transparent_square_of_the_requested_size(size: int) -> None:
     image = render(DeviceState.CONNECTED, 85, size=size)

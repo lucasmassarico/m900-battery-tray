@@ -3,18 +3,32 @@
 Shows the battery level of your **Delux M900 Pro** wireless mouse in the Windows tray and warns
 you when it runs low. You don't need the Delux software.
 
-> **Work in progress.** The tray app is not ready yet. For now you can run the diagnostic probe
-> described below.
+> **Status:** it works when run from source. A ready-to-run `.exe` is coming.
 
-## What it will do
+## What it does
 
-- Show the battery percentage as the tray icon, colored by level: normal, low or critical.
-- Show the model, percentage and state (connected, charging, asleep, receiver missing) in the
-  tooltip.
-- Send a Windows notification when the battery drops below 20 % and again below 10 %.
-- Start with Windows, if you turn it on from the tray menu.
+- Shows the battery percentage as the tray icon, with a small battery gauge under it.
+- Shows the model, percentage and state in the tooltip and at the top of the right-click menu.
+- Sends a Windows notification when the battery drops to 20 %, and again at 10 %.
+- Starts with Windows, if you tick **Start with Windows** in the right-click menu.
 
 It works with the mouse's 2.4 GHz receiver (`1D57:FA65`). Bluetooth is not supported.
+
+### Reading the icon
+
+| Icon | Meaning |
+|---|---|
+| White (or black on a light taskbar) number and gauge | On battery |
+| Amber | Low battery (20 % or less) |
+| Red | Critical battery (10 % or less) |
+| Green, with a lightning bolt | Charging. The level reads a few points high while the cable is in |
+| Faded, dotted gauge | The mouse is asleep. The number is the last known level |
+| Faded, three dots in the gauge | Waiting for the first reading |
+| Faded, with an ✕ | The USB receiver is unplugged |
+
+The icon follows the light or dark taskbar theme. Windows 11 hides new tray icons at first: to
+keep it visible, open **Settings > Personalization > Taskbar > Other system tray icons** and turn
+it on.
 
 ## Is it safe?
 
@@ -32,6 +46,15 @@ cd m900-battery-tray
 py -m venv .venv
 .venv\Scripts\python -m pip install -e .
 ```
+
+Start it without a console window:
+
+```powershell
+.venv\Scripts\pythonw -m m900_battery_tray
+```
+
+Only one copy runs at a time. To quit, right-click the icon and choose **Exit**. If something
+goes wrong, the log is in `%APPDATA%\m900-battery-tray\app.log`.
 
 ## Settings
 

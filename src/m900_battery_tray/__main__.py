@@ -34,14 +34,16 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
-    if not args.probe:
-        if args.seconds is not None or args.out is not None:
-            parser.error("--seconds and --out require --probe")
-        parser.error("the tray app is not implemented yet; use --probe")
+    if args.probe:
+        from m900_battery_tray import probe
 
-    from m900_battery_tray import probe
+        return probe.main(args.seconds, args.out)
+    if args.seconds is not None or args.out is not None:
+        parser.error("--seconds and --out require --probe")
 
-    return probe.main(args.seconds, args.out)
+    from m900_battery_tray import app
+
+    return app.main()
 
 
 if __name__ == "__main__":

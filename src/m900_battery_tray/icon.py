@@ -26,6 +26,11 @@ class TaskbarTheme(Enum):
     DARK = "dark"
     LIGHT = "light"
 
+    @classmethod
+    def from_system_uses_light_theme(cls, value: object) -> "TaskbarTheme":
+        """Map the registry value SystemUsesLightTheme; Windows 11 defaults to dark."""
+        return cls.LIGHT if value == 1 else cls.DARK
+
 
 @dataclass(frozen=True)
 class Palette:

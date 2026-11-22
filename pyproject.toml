@@ -10,7 +10,8 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "hidapi>=0.14",
-    "pystray>=0.19.5",
+    # tray.py uses pystray's Win32 internals; tests/test_tray_contract.py guards upgrades.
+    "pystray>=0.19.5,<0.20",
     "Pillow>=11",
 ]
 
@@ -25,7 +26,7 @@ build = [
     "pyinstaller>=6.11",
 ]
 
-[project.scripts]
+[project.gui-scripts]
 m900-battery-tray = "m900_battery_tray.__main__:main"
 
 [tool.hatch.build.targets.wheel]
@@ -52,8 +53,11 @@ branch = true
 omit = [
     # OS and hardware glue, validated by hand with the real mouse.
     "*/m900_battery_tray/__main__.py",
+    "*/m900_battery_tray/app.py",
     "*/m900_battery_tray/hidapi_transport.py",
     "*/m900_battery_tray/probe.py",
+    "*/m900_battery_tray/tray.py",
+    "*/m900_battery_tray/windows.py",
 ]
 
 [tool.coverage.report]
