@@ -17,7 +17,7 @@ DEFAULTS = {
     "version": 1,
     "low_battery_percent": 20,
     "critical_battery_percent": 10,
-    "sleep_after_seconds": 10,
+    "sleep_after_seconds": 15,
 }
 
 
@@ -27,7 +27,7 @@ def settings(**overrides: Any) -> dict[str, Any]:
 
 def test_defaults() -> None:
     assert Config() == Config(
-        low_battery_percent=20, critical_battery_percent=10, sleep_after_seconds=10
+        low_battery_percent=20, critical_battery_percent=10, sleep_after_seconds=15
     )
 
 
@@ -88,8 +88,8 @@ def test_config_from_dict_requires_whole_numbers(value: object) -> None:
         ({"low_battery_percent": 1}, "low_battery_percent must be between 2 and 99"),
         ({"low_battery_percent": 10}, "must be lower than low_battery_percent"),
         ({"critical_battery_percent": 30}, "must be lower than low_battery_percent"),
-        ({"sleep_after_seconds": 5}, "sleep_after_seconds must be between 6 and 3600"),
-        ({"sleep_after_seconds": 3601}, "sleep_after_seconds must be between 6 and 3600"),
+        ({"sleep_after_seconds": 11}, "sleep_after_seconds must be between 12 and 3600"),
+        ({"sleep_after_seconds": 3601}, "sleep_after_seconds must be between 12 and 3600"),
     ],
 )
 def test_config_from_dict_rejects_out_of_range_values(
@@ -104,7 +104,7 @@ def test_config_from_dict_rejects_out_of_range_values(
     [
         {"low_battery_percent": 2, "critical_battery_percent": 1},
         {"low_battery_percent": 99, "critical_battery_percent": 98},
-        {"sleep_after_seconds": 6},
+        {"sleep_after_seconds": 12},
         {"sleep_after_seconds": 3600},
     ],
 )

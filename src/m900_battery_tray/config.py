@@ -12,8 +12,8 @@ CONFIG_VERSION = 1
 
 CRITICAL_PERCENT_RANGE = (1, 98)
 LOW_PERCENT_RANGE = (2, 99)
-# The receiver reports every 2 s; anything shorter than three reports would flicker to "asleep".
-SLEEP_SECONDS_RANGE = (6, 3600)
+# A dozing mouse reports every 4 s; anything shorter than three reports would flicker to "asleep".
+SLEEP_SECONDS_RANGE = (12, 3600)
 
 
 class ConfigError(ValueError):
@@ -24,7 +24,7 @@ class ConfigError(ValueError):
 class Config:
     low_battery_percent: int = 20
     critical_battery_percent: int = 10
-    sleep_after_seconds: int = 10
+    sleep_after_seconds: int = 15
 
     def __post_init__(self) -> None:
         _require_range(

@@ -43,7 +43,7 @@ these defaults the first time it runs:
   "version": 1,
   "low_battery_percent": 20,
   "critical_battery_percent": 10,
-  "sleep_after_seconds": 10
+  "sleep_after_seconds": 15
 }
 ```
 
@@ -51,7 +51,11 @@ these defaults the first time it runs:
 |---|---|---|
 | `low_battery_percent` | First warning, and the start of the "low" icon color | 2 to 99, above `critical_battery_percent` |
 | `critical_battery_percent` | Second warning, and the start of the "critical" icon color | 1 to 98 |
-| `sleep_after_seconds` | Seconds without battery reports before the mouse is shown as asleep | 6 to 3600 |
+| `sleep_after_seconds` | Seconds without battery reports before the mouse is shown as asleep | 12 to 3600 |
+
+`sleep_after_seconds` is not the mouse's own sleep time (the one you set in the Delux app). The
+receiver goes quiet when the mouse sleeps, whatever that setting is, and this value only says how
+long the app waits for that silence before it shows "asleep".
 
 ## Probe (diagnostics)
 
