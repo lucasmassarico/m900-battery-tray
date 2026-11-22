@@ -1,9 +1,10 @@
-"""Thin Win32 helpers: DPI awareness, tray icon size, taskbar theme, single instance, and
-opening a file for editing."""
+"""Thin Win32 helpers: DPI awareness, tray icon size, taskbar theme, single instance, opening a
+file for editing, and borrowing the console of the terminal that started the app."""
 
 import ctypes
 import os
 import subprocess
+import sys
 import winreg
 from ctypes import wintypes
 from pathlib import Path
@@ -15,6 +16,7 @@ DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2 = -4
 SM_CXSMICON = 49
 SPI_GETCLIENTAREAANIMATION = 0x1042
 ERROR_ALREADY_EXISTS = 183
+ATTACH_PARENT_PROCESS = wintypes.DWORD(-1).value
 
 _user32 = ctypes.WinDLL("user32", use_last_error=True)
 _kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
@@ -40,6 +42,8 @@ _user32.SystemParametersInfoW.argtypes = [
 _user32.SystemParametersInfoW.restype = wintypes.BOOL
 _kernel32.CreateMutexW.argtypes = [ctypes.c_void_p, wintypes.BOOL, wintypes.LPCWSTR]
 _kernel32.CreateMutexW.restype = wintypes.HANDLE
+_kernel32.AttachConsole.argtypes = [wintypes.DWORD]
+_kernel32.AttachConsole.restype = wintypes.BOOL
 
 
 def enable_dpi_awareness() -> None:
@@ -79,6 +83,18 @@ def read_taskbar_theme() -> TaskbarTheme:
     except OSError:
         value = None
     return TaskbarTheme.from_system_uses_light_theme(value)
+
+
+def attach_parent_console() -> None:
+    """Send print() and errors to the terminal that started this windowed exe, if there is one.
+
+    The packaged exe has no console of its own, so without this `--probe` and `--help` print
+    nothing. Started from Explorer or at sign-in there is no terminal and nothing changes.
+    """
+    if not _kernel32.AttachConsole(ATTACH_PARENT_PROCESS):
+        return
+    sys.stdout = open("CONOUT$", "w", buffering=1)  # noqa: SIM115 - lives as long as the process
+    sys.stderr = sys.stdout
 
 
 def open_in_editor(path: Path) -> None:

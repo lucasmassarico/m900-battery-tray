@@ -108,6 +108,13 @@ timestamp. Use it if the app can't find your mouse, or to check what your receiv
 The last byte is the battery percentage (`4a` = 74 %). Without `--seconds` the probe runs until
 you press Ctrl+C, and `--out file.txt` also saves the output to a file.
 
+With the packaged app, run the probe from PowerShell in the app's folder. The `| Out-Host` makes
+PowerShell wait for the probe to finish before it shows the prompt again:
+
+```powershell
+.\m900-battery-tray.exe --probe --seconds 30 | Out-Host
+```
+
 ## Development
 
 ```powershell
@@ -116,5 +123,16 @@ you press Ctrl+C, and `--out file.txt` also saves the output to a file.
 .venv\Scripts\black --check .
 .venv\Scripts\pytest
 ```
+
+To build the packaged app (a folder with `m900-battery-tray.exe`, no Python needed to run it):
+
+```powershell
+.venv\Scripts\python -m pip install -e ".[build]"
+.venv\Scripts\python scripts\build_exe.py
+```
+
+The folder is `dist\m900-battery-tray\`, and `dist\m900-battery-tray-<version>-win64.zip` holds the
+same folder, ready to share. The exe isn't signed, so Windows SmartScreen may warn the first time it
+runs (**More info > Run anyway**).
 
 The battery protocol is described in [docs/protocol.md](docs/protocol.md).

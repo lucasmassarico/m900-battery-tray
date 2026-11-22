@@ -32,6 +32,10 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
+    if sys.stdout is None and (sys.argv[1:] if argv is None else argv):
+        from m900_battery_tray.windows import attach_parent_console
+
+        attach_parent_console()
     parser = build_parser()
     args = parser.parse_args(argv)
     if args.probe:
