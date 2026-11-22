@@ -40,6 +40,7 @@ def test_parse_frame_accepts_battery_reports(hex_frame: str, expected: BatteryFr
         pytest.param("043040014a", id="vendor-report-id"),
         pytest.param("033042014a", id="unknown-event"),
         pytest.param("033000014a", id="zero-event"),
+        pytest.param("0300c00000", id="replug-junk"),
         pytest.param("0330400165", id="percent-101"),
         pytest.param("03304001ff", id="percent-255"),
     ],

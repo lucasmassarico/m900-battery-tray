@@ -50,9 +50,10 @@ def replay(fixture: str, opened_at: float, ticks: bool = True) -> Timeline:
             monitor = monitor.handle(Tick(at=now))
             timeline.append((now, monitor.snapshot))
         frame = parse_frame(captured.data)
-        assert frame is not None
         now = captured.elapsed_s
-        monitor = monitor.handle(FrameReceived(frame=frame, at=now))
+        # Like the reader thread: a report that isn't a battery frame only counts as a Tick.
+        event = Tick(at=now) if frame is None else FrameReceived(frame=frame, at=now)
+        monitor = monitor.handle(event)
         timeline.append((now, monitor.snapshot))
     return timeline
 
@@ -214,6 +215,23 @@ def test_replay_pc_sleep_capture_keeps_the_level_after_resume() -> None:
     assert {snapshot.state for time, snapshot in timeline if time >= 9.70} == {
         DeviceState.CONNECTED
     }
+
+
+def test_replay_charging_until_full_ignores_the_lone_status_2_report() -> None:
+    timeline = replay("charging_until_full.txt", opened_at=986.0, ticks=False)
+    charging_81 = Snapshot(state=DeviceState.CHARGING, percent=81)
+
+    assert snapshot_at(timeline, 988.86) == charging_81
+    assert snapshot_at(timeline, 990.87) == charging_81
+    assert snapshot_at(timeline, 2766.96) == charging_81
+    assert snapshot_at(timeline, 2768.96) == Snapshot(state=DeviceState.CONNECTED, percent=100)
+
+
+def test_replay_receiver_replug_burst_ignores_the_junk_reports() -> None:
+    timeline = replay("receiver_replug_burst.txt", opened_at=748.94)
+
+    assert snapshot_at(timeline, 749.39) == Snapshot(state=DeviceState.WAITING, percent=None)
+    assert snapshot_at(timeline, 750.71) == Snapshot(state=DeviceState.CHARGING, percent=81)
 
 
 def test_replay_receiver_replug_capture() -> None:

@@ -1,0 +1,12 @@
+# Receiver plugged back in while charging. Right after the collection is reopened, the receiver
+# floods about 200 junk reports (03 00 c0 00 00) within 50 ms (trimmed here), then the normal
+# reports resume.
+# 2026-11-22T14:56:09.862  t=  748.94  opened battery collection <path>
+2026-11-22T14:56:09.938  t=  749.02  dt=  8.31  03 00 c0 00 00
+2026-11-22T14:56:09.939  t=  749.02  dt=  0.00  03 00 c0 00 00
+2026-11-22T14:56:09.939  t=  749.02  dt=  0.00  03 00 c0 00 00
+2026-11-22T14:56:09.989  t=  749.07  dt=  0.00  03 00 c0 00 00
+2026-11-22T14:56:10.311  t=  749.39  dt=  0.32  03 30 40 03 51
+2026-11-22T14:56:11.628  t=  750.71  dt=  1.32  03 30 40 03 51
+2026-11-22T14:56:13.627  t=  752.71  dt=  2.00  03 30 40 03 51
+2026-11-22T14:56:15.637  t=  754.72  dt=  2.01  03 30 40 03 51

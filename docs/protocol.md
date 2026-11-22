@@ -65,22 +65,25 @@ table above.
   When the mouse moved again, reports came back every 2 s, and the first one was valid. So the
   receiver goes silent while the mouse sleeps, whatever the sleep time is.
 - **Charging on the cable:** the mouse stays on the 2.4 GHz link. Reports keep coming every 2 s,
-  byte 3 turns to `3` at once, and no other USB device shows up. The percentage is only re-read
-  now and then, and it reads a few points higher while charging (78 % turned into 81 % about
-  25 s after the cable went in), so it looks like a voltage reading.
-- **Cable plugged in or unplugged:** right before the level is re-read, one junk report shows
-  up: `03 30 40 01 64` (100 %, status 1), seen on both. After unplugging, the level settled
-  within seconds (85, 84, 83 %) and then dropped by 1 % every few minutes. The two-equal-reports
-  rule filters the junk report.
+  byte 3 turns to `3` at once, and no other USB device shows up. **The percentage is not
+  meaningful while charging:** it is re-read once, about 25 s after the cable goes in (78 %
+  turned into 81 %), and then stays frozen until the cable comes out (81 % for a whole 46 min
+  charge that actually filled the battery). A lone report with status `2` shows up every 5 to
+  9 min during the charge, never twice in a row; the two-equal-reports rule ignores it.
+- **Cable plugged in or unplugged:** right before the level is re-read, one report
+  `03 30 40 01 64` (100 %, status 1) shows up. After a short charge it was junk: the level then
+  settled within seconds (85, 84, 83 %) and dropped by 1 % every few minutes. After a full charge
+  the level really was 100 %, and it stayed there.
 - **Granularity:** the percentage moves in steps of 1.
 - **PC sleep and resume:** the open handle keeps working. There is no read error and no device
   change, and reports resume on the same handle right after the PC wakes up.
 - **Receiver unplugged:** the pending read fails at once and the collection leaves the device list
   about 0.4 s later. After the receiver is plugged back in, the collection comes back with the
-  same path, and the first report arrives about 2 s after it is reopened.
+  same path. Right after it is reopened, the receiver may flood about 200 junk reports
+  (`03 00 c0 00 00`) within 50 ms; the event byte `0xC0` rejects them. Normal reports follow.
 
 ## Not verified yet
 
-- **Full charge:** whether status `2` (full) shows up at 100 %.
+- **Status `2`:** what exactly it means. It only showed up as lone reports while charging.
 - **Hibernation:** only a normal PC sleep was tested.
 - **Bluetooth mode:** out of scope.
