@@ -1,5 +1,6 @@
-"""Thin Win32 helpers: DPI awareness, tray icon size, taskbar theme, single instance, opening a
-file for editing, and borrowing the console of the terminal that started the app."""
+"""Thin Win32 helpers: DPI awareness, tray icon size, taskbar theme, menu theme, single
+instance, opening a file for editing, and borrowing the console of the terminal that started
+the app."""
 
 import ctypes
 import os
@@ -17,6 +18,8 @@ SM_CXSMICON = 49
 SPI_GETCLIENTAREAANIMATION = 0x1042
 ERROR_ALREADY_EXISTS = 183
 ATTACH_PARENT_PROCESS = wintypes.DWORD(-1).value
+# uxtheme's PreferredAppMode values: ForceDark and ForceLight.
+MENU_APP_MODES = {TaskbarTheme.DARK: 2, TaskbarTheme.LIGHT: 3}
 
 _user32 = ctypes.WinDLL("user32", use_last_error=True)
 _kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
@@ -44,6 +47,15 @@ _kernel32.CreateMutexW.argtypes = [ctypes.c_void_p, wintypes.BOOL, wintypes.LPCW
 _kernel32.CreateMutexW.restype = wintypes.HANDLE
 _kernel32.AttachConsole.argtypes = [wintypes.DWORD]
 _kernel32.AttachConsole.restype = wintypes.BOOL
+
+# Exported by ordinal only (Windows 10 1903+): there is no documented way to theme Win32 menus.
+_uxtheme = ctypes.WinDLL("uxtheme")
+_set_preferred_app_mode = _uxtheme[135]
+_set_preferred_app_mode.argtypes = [ctypes.c_int]
+_set_preferred_app_mode.restype = ctypes.c_int
+_flush_menu_themes = _uxtheme[136]
+_flush_menu_themes.argtypes = []
+_flush_menu_themes.restype = None
 
 
 def enable_dpi_awareness() -> None:
@@ -83,6 +95,16 @@ def read_taskbar_theme() -> TaskbarTheme:
     except OSError:
         value = None
     return TaskbarTheme.from_system_uses_light_theme(value)
+
+
+def apply_menu_theme(theme: TaskbarTheme) -> None:
+    """Draw this process's menus dark or light, to match the taskbar.
+
+    Left alone, Win32 menus are always light, and on some systems the light menu doesn't show
+    the hover highlight until something repaints it. Menus created afterwards use the theme.
+    """
+    _set_preferred_app_mode(MENU_APP_MODES[theme])
+    _flush_menu_themes()
 
 
 def attach_parent_console() -> None:

@@ -1,7 +1,7 @@
 """The notification-area icon, on top of pystray's Win32 backend.
 
-pystray needs three changes here, all through its Win32 internals (pinned to pystray 0.19.x
-and checked by tests/test_tray_contract.py):
+pystray needs four changes here, all through its Win32 internals (pinned to pystray 0.19.x
+and checked by tests/test_tray_contract.py), and the menu follows the taskbar theme:
 
 - crisp icon: pystray saves the image as a multi-size .ico and loads it at the large-icon
   size, so Windows scales it down and the pixel art blurs. Here the icon is drawn and loaded
@@ -9,7 +9,9 @@ and checked by tests/test_tray_contract.py):
 - cheap animation: each distinct image becomes an icon handle once and is cached, so the
   charging animation only swaps cached handles;
 - one UI thread: the reader thread only queues work, and the icon's own message loop runs
-  it (and the animation timer), so Shell_NotifyIcon and menu calls never race.
+  it (and the animation timer), so Shell_NotifyIcon and menu calls never race;
+- menu owner: pystray brings one of its windows to the front but opens the menu for another.
+  Here the menu's own window comes to the front, as Windows asks for a tray icon's menu.
 """
 
 import ctypes
@@ -19,6 +21,7 @@ import queue
 import tempfile
 from collections import OrderedDict
 from collections.abc import Callable
+from ctypes import wintypes
 
 from PIL import Image
 from pystray import Menu
@@ -31,6 +34,7 @@ from m900_battery_tray.state import DeviceState
 from m900_battery_tray.texts import Notification
 from m900_battery_tray.windows import (
     animations_enabled,
+    apply_menu_theme,
     kill_timer,
     set_timer,
     small_icon_size,
@@ -38,6 +42,7 @@ from m900_battery_tray.windows import (
 
 log = logging.getLogger(__name__)
 
+WM_NULL = 0x0000
 WM_SETTINGCHANGE = 0x001A
 WM_TIMER = 0x0113
 WM_RUN_QUEUED = 0x8000 + 1  # WM_APP + 1
@@ -46,6 +51,7 @@ ANIMATION_TIMER_ID = 1
 FRAME_INTERVAL_MS = 500
 # Enough for every animation frame in both themes plus the still icons recently shown.
 MAX_CACHED_ICONS = 32
+MENU_FLAGS = win32.TPM_RIGHTALIGN | win32.TPM_BOTTOMALIGN | win32.TPM_RETURNCMD
 
 
 class TrayIcon(Win32Icon):
@@ -91,6 +97,21 @@ class TrayIcon(Win32Icon):
         if wparam == ANIMATION_TIMER_ID:
             self._on_timer()
 
+    def _on_notify(self, wparam: int, lparam: int) -> None:
+        if lparam != win32.WM_RBUTTONUP or not self._menu_handle:
+            super()._on_notify(wparam, lparam)
+            return
+        owner = self._menu_hwnd
+        win32.SetForegroundWindow(owner)
+        point = wintypes.POINT()
+        win32.GetCursorPos(ctypes.byref(point))
+        hmenu, callbacks = self._menu_handle
+        index = win32.TrackPopupMenuEx(hmenu, MENU_FLAGS, point.x, point.y, owner, None)
+        # Microsoft's recipe for tray menus, so the next right-click opens the menu again.
+        win32.PostMessage(owner, WM_NULL, 0, 0)
+        if index > 0:
+            callbacks[index - 1](self)
+
     def _on_setting_change(self, wparam: int, lparam: int) -> None:
         if lparam and ctypes.wstring_at(lparam) == THEME_SETTING:
             self.on_theme_change()
@@ -135,7 +156,8 @@ class TrayDisplay:
         self._view: TrayView | None = None
         self._frame = 0
         self._animating = False
-        icon.on_theme_change = self._redraw
+        apply_menu_theme(read_theme())
+        icon.on_theme_change = self._on_theme_change
 
     @property
     def status(self) -> str:
@@ -146,6 +168,10 @@ class TrayDisplay:
 
     def notify(self, notification: Notification) -> None:
         self._icon.call_soon(lambda: self._icon.notify(notification.message, notification.title))
+
+    def _on_theme_change(self) -> None:
+        apply_menu_theme(self._read_theme())
+        self._redraw()
 
     def _apply(self, view: TrayView) -> None:
         self._view = view

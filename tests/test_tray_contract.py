@@ -17,5 +17,22 @@ def test_pystray_win32_internals_used_by_the_tray() -> None:
     assert icon._icon_handle is None
     assert callable(Icon._assert_icon_handle)
     assert callable(Icon._release_icon)
-    for name in ("LoadImage", "DestroyIcon", "PostMessage", "IMAGE_ICON", "LR_LOADFROMFILE"):
+    assert callable(Icon._on_notify)
+    assert icon._menu_hwnd is None
+    icon.update_menu()
+    assert icon._menu_handle is None
+    for name in (
+        "LoadImage",
+        "DestroyIcon",
+        "PostMessage",
+        "IMAGE_ICON",
+        "LR_LOADFROMFILE",
+        "SetForegroundWindow",
+        "GetCursorPos",
+        "TrackPopupMenuEx",
+        "WM_RBUTTONUP",
+        "TPM_RIGHTALIGN",
+        "TPM_BOTTOMALIGN",
+        "TPM_RETURNCMD",
+    ):
         assert hasattr(win32, name), name

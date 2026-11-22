@@ -31,7 +31,7 @@ It works with the mouse's 2.4 GHz receiver (`1D57:FA65`). Bluetooth is not suppo
 
 Hover over the icon for the exact percentage.
 
-The icon follows the light or dark taskbar theme. Windows 11 hides new tray icons at first: to
+The icon and its right-click menu follow the light or dark taskbar theme. Windows 11 hides new tray icons at first: to
 keep it visible, open **Settings > Personalization > Taskbar > Other system tray icons** and turn
 it on.
 
