@@ -64,20 +64,23 @@ table above.
   2 s to every 4 s about 1 min after the mouse was last used, and stopped about 1 min after that.
   When the mouse moved again, reports came back every 2 s, and the first one was valid. So the
   receiver goes silent while the mouse sleeps, whatever the sleep time is.
-- **Charging on the cable:** the mouse stays on the 2.4 GHz link. Reports keep coming every 2 s
-  with byte 3 = `3`, and no other USB device shows up. The percentage stays at its value from
-  when the cable was plugged in.
-- **Cable unplugged:** the first report after that is junk (`03 30 40 01 64`, 100 %), and the
-  next ones settle within seconds (85, 84, 83 %), then drop by 1 % every few minutes. The
-  two-equal-reports rule filters the junk report.
+- **Charging on the cable:** the mouse stays on the 2.4 GHz link. Reports keep coming every 2 s,
+  byte 3 turns to `3` at once, and no other USB device shows up. The percentage is only re-read
+  now and then, and it reads a few points higher while charging (78 % turned into 81 % about
+  25 s after the cable went in), so it looks like a voltage reading.
+- **Cable plugged in or unplugged:** right before the level is re-read, one junk report shows
+  up: `03 30 40 01 64` (100 %, status 1), seen on both. After unplugging, the level settled
+  within seconds (85, 84, 83 %) and then dropped by 1 % every few minutes. The two-equal-reports
+  rule filters the junk report.
 - **Granularity:** the percentage moves in steps of 1.
+- **PC sleep and resume:** the open handle keeps working. There is no read error and no device
+  change, and reports resume on the same handle right after the PC wakes up.
 - **Receiver unplugged:** the pending read fails at once and the collection leaves the device list
   about 0.4 s later. After the receiver is plugged back in, the collection comes back with the
   same path, and the first report arrives about 2 s after it is reopened.
 
 ## Not verified yet
 
-- **Percentage while charging:** whether it ever rises before the cable is unplugged, and whether
-  status `2` (full) shows up at 100 %.
-- **PC sleep and resume:** whether the open handle fails, goes silent or keeps working.
+- **Full charge:** whether status `2` (full) shows up at 100 %.
+- **Hibernation:** only a normal PC sleep was tested.
 - **Bluetooth mode:** out of scope.

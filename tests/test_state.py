@@ -37,14 +37,15 @@ def connected_monitor() -> Monitor:
     return feed(opened_monitor(), (ON_BATTERY_74, 1.0), (ON_BATTERY_74, 3.0))
 
 
-def replay(fixture: str, opened_at: float) -> Timeline:
+def replay(fixture: str, opened_at: float, ticks: bool = True) -> Timeline:
     """Feed a real capture through the monitor, with a Tick every second between reports,
-    the way the reader thread does with its 1 s read timeout."""
+    the way the reader thread does with its 1 s read timeout. `ticks=False` models a
+    suspended PC, where no Tick happens while the process is frozen."""
     monitor = opened_monitor(at=opened_at)
     timeline: Timeline = [(opened_at, monitor.snapshot)]
     now = opened_at
     for captured in read_capture(FIXTURES / fixture):
-        while now + TICK_S < captured.elapsed_s:
+        while ticks and now + TICK_S < captured.elapsed_s:
             now += TICK_S
             monitor = monitor.handle(Tick(at=now))
             timeline.append((now, monitor.snapshot))
@@ -189,6 +190,30 @@ def test_replay_cable_unplug_capture_hides_the_junk_report() -> None:
     assert snapshot_at(timeline, 280.11) == Snapshot(state=DeviceState.CHARGING, percent=74)
     assert snapshot_at(timeline, 282.11) == Snapshot(state=DeviceState.CONNECTED, percent=83)
     assert {snapshot.percent for _, snapshot in timeline} == {None, 74, 83}
+
+
+def test_replay_cable_plug_in_capture_hides_the_junk_report() -> None:
+    timeline = replay("cable_plug_in.txt", opened_at=0.11)
+
+    assert snapshot_at(timeline, 4.17) == Snapshot(state=DeviceState.CONNECTED, percent=78)
+    assert snapshot_at(timeline, 6.17) == Snapshot(state=DeviceState.CONNECTED, percent=78)
+    assert snapshot_at(timeline, 8.18) == Snapshot(state=DeviceState.CHARGING, percent=78)
+    assert snapshot_at(timeline, 32.22) == Snapshot(state=DeviceState.CHARGING, percent=78)
+    assert snapshot_at(timeline, 34.22) == Snapshot(state=DeviceState.CHARGING, percent=81)
+    assert {snapshot.percent for _, snapshot in timeline} == {None, 78, 81}
+
+
+def test_replay_pc_sleep_capture_keeps_the_level_after_resume() -> None:
+    timeline = replay("pc_sleep.txt", opened_at=0.11, ticks=False)
+    connected_78 = Snapshot(state=DeviceState.CONNECTED, percent=78)
+
+    assert snapshot_at(timeline, 27.70) == connected_78
+    # The first report after resume is not trusted on its own, so nothing changes.
+    assert snapshot_at(timeline, 130.00) == connected_78
+    assert snapshot_at(timeline, 142.01) == connected_78
+    assert {snapshot.state for time, snapshot in timeline if time >= 9.70} == {
+        DeviceState.CONNECTED
+    }
 
 
 def test_replay_receiver_replug_capture() -> None:
